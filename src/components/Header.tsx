@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { BarChart3, LogIn, UserPlus, Home, LayoutDashboard, LogOut, Menu, X } from 'lucide-react';
+import {
+  BarChart3,
+  Home,
+  LayoutDashboard,
+  LogIn,
+  LogOut,
+  Menu,
+  UserPlus,
+  X,
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 interface HeaderProps {
@@ -8,207 +17,270 @@ interface HeaderProps {
   currentMode?: 'login' | 'signup';
 }
 
-export const Header: React.FC<HeaderProps> = ({ onSelectMode, currentMode }) => {
-  const { user, signOut, isConfigured } = useAuth();
+export const Header: React.FC<HeaderProps> = ({
+  onSelectMode,
+  currentMode,
+}) => {
+  const { signOut, isConfigured, isAuthenticated } = useAuth();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup';
+  const isHome = location.pathname === '/';
+  const isAuthPage =
+    location.pathname === '/login' || location.pathname === '/signup';
 
-  const handleModeClick = (mode: 'login' | 'signup') => {
+  const closeMobileMenu = () => {
+    setMobileMenuOpen(false);
+  };
+
+  const handleAuthMode = (mode: 'login' | 'signup') => {
     if (onSelectMode) {
       onSelectMode(mode);
     }
   };
 
+  const navItemClass = (active = false) =>
+    `flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm transition-all duration-200 ${
+      active
+        ? 'bg-[#EAF4EE] text-[#2D6A4F] font-semibold'
+        : 'text-[#64748B] hover:text-[#2D6A4F] hover:bg-[#F3F8F5]'
+    }`;
+
   return (
-    <header id="main-header" className="bg-white border-b border-slate-200/80 sticky top-0 z-40">
-      {!isConfigured && (
-        <div id="supabase-config-banner" className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs text-amber-800 flex items-center justify-between">
-          <div className="flex items-center gap-2 max-w-6xl mx-auto w-full">
-            <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-            <span>
-              <strong>Supabase Setup:</strong> Add <code className="bg-amber-100 px-1.5 py-0.5 rounded text-amber-900 font-mono">VITE_SUPABASE_URL</code> and <code className="bg-amber-100 px-1.5 py-0.5 rounded text-amber-900 font-mono">VITE_SUPABASE_ANON_KEY</code> to connect your live Supabase project.
-            </span>
+    <header className="sticky top-3 z-50 w-full px-4 sm:px-6">
+      <div className="mx-auto max-w-[1280px]">
+
+        {/* Supabase configuration notice */}
+        {!isConfigured && (
+          <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-900 shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+
+              <span>
+                <strong>Supabase Setup:</strong> Add{' '}
+                <code className="rounded bg-amber-100 px-1.5 py-0.5 font-mono">
+                  VITE_SUPABASE_URL
+                </code>{' '}
+                and{' '}
+                <code className="rounded bg-amber-100 px-1.5 py-0.5 font-mono">
+                  VITE_SUPABASE_ANON_KEY
+                </code>{' '}
+                in your environment settings.
+              </span>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16 sm:h-18">
-          {/* Left: Branding */}
-          <Link to="/" className="flex items-center gap-3 group" id="header-brand">
-            <div className="w-10 h-10 rounded-xl bg-emerald-700 flex items-center justify-center text-white shadow-sm shadow-emerald-700/20 group-hover:bg-emerald-800 transition-colors">
-              <BarChart3 className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="font-bold text-slate-900 text-base sm:text-lg tracking-tight block leading-tight">
-                Comparative Sales Analysis
-              </span>
-              <span className="text-[11px] text-emerald-800 font-medium tracking-wide">
-                Stores • Customers • Demographics
-              </span>
-            </div>
-          </Link>
+        {/* Main Header */}
+        <div className="rounded-2xl border border-[#E2E8F0] bg-white/95 px-3 sm:px-5 shadow-[0_4px_20px_rgba(15,23,42,0.06)] backdrop-blur-md">
 
-          {/* Right: Navigation Links */}
-          <nav className="hidden md:flex items-center gap-2 sm:gap-3" id="header-nav-links">
+          <div className="flex min-h-[64px] items-center justify-between gap-4">
+
+            {/* Brand */}
             <Link
               to="/"
-              id="header-nav-home"
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg transition-colors ${
-                location.pathname === '/'
-                  ? 'text-emerald-800 bg-emerald-50'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
+              onClick={closeMobileMenu}
+              className="group flex min-w-0 items-center gap-3"
             >
-              <Home className="w-4 h-4" />
-              Home
+              {/* Logo */}
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#2D6A4F] text-white shadow-sm transition-all duration-200 group-hover:bg-[#24583F] group-hover:shadow-md">
+                <BarChart3 className="h-5 w-5" />
+              </div>
+
+              {/* Brand text */}
+              <div className="min-w-0">
+                <div className="truncate text-[15px] font-bold leading-tight tracking-tight text-[#0F172A] transition-colors group-hover:text-[#2D6A4F] sm:text-base">
+                  Comparative Sales Analysis
+                </div>
+
+                <div className="mt-0.5 text-[10px] font-medium tracking-wide text-[#52735F] sm:text-[11px]">
+                  Stores • Customers • Demographics
+                </div>
+              </div>
             </Link>
 
-            {user ? (
+            {/* Desktop Navigation */}
+            <nav className="hidden items-center gap-1 md:flex">
+
+              {/* Home */}
+              <Link
+                to="/"
+                className={navItemClass(isHome)}
+              >
+                <Home className="h-4 w-4" />
+                <span>Home</span>
+              </Link>
+
+              {isAuthenticated ? (
+                <>
+                  {/* Dashboard */}
+                  <Link
+                    to="/dashboard"
+                    className={navItemClass(
+                      location.pathname === '/dashboard'
+                    )}
+                  >
+                    <LayoutDashboard className="h-4 w-4" />
+                    <span>Dashboard</span>
+                  </Link>
+
+                  <div className="mx-2 h-6 w-px bg-[#E2E8F0]" />
+
+                  {/* Logout */}
+                  <button
+                    type="button"
+                    onClick={signOut}
+                    className="flex cursor-pointer items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium text-red-600 transition-all duration-200 hover:bg-red-50 hover:text-red-700"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>Logout</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="mx-2 h-6 w-px bg-[#E2E8F0]" />
+
+                  {/* Login */}
+                  {isAuthPage && onSelectMode ? (
+                    <button
+                      type="button"
+                      onClick={() => handleAuthMode('login')}
+                      className={`flex cursor-pointer items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-all duration-200 ${
+                        currentMode === 'login'
+                          ? 'bg-[#EAF4EE] font-semibold text-[#2D6A4F]'
+                          : 'text-[#64748B] hover:bg-[#F3F8F5] hover:text-[#2D6A4F]'
+                      }`}
+                    >
+                      <LogIn className="h-4 w-4" />
+                      <span>Login</span>
+                    </button>
+                  ) : (
+                    <Link
+                      to="/login"
+                      className="flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium text-[#64748B] transition-all duration-200 hover:bg-[#F3F8F5] hover:text-[#2D6A4F]"
+                    >
+                      <LogIn className="h-4 w-4" />
+                      <span>Login</span>
+                    </Link>
+                  )}
+
+                  {/* Sign Up */}
+                  {isAuthPage && onSelectMode ? (
+                    <button
+                      type="button"
+                      onClick={() => handleAuthMode('signup')}
+                      className={`flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-all duration-200 ${
+                        currentMode === 'signup'
+                          ? 'bg-[#24583F] shadow-md'
+                          : 'bg-[#2D6A4F] shadow-sm hover:-translate-y-0.5 hover:bg-[#24583F] hover:shadow-md'
+                      }`}
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      <span>Sign Up</span>
+                    </button>
+                  ) : (
+                    <Link
+                      to="/signup"
+                      className="flex items-center gap-2 rounded-xl bg-[#2D6A4F] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#24583F] hover:shadow-md"
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      <span>Sign Up</span>
+                    </Link>
+                  )}
+                </>
+              )}
+            </nav>
+
+            {/* Mobile menu button */}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((open) => !open)}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[#334155] transition-colors hover:bg-[#F3F8F5] hover:text-[#2D6A4F] md:hidden"
+              aria-label="Toggle navigation menu"
+              aria-expanded={mobileMenuOpen}
+            >
+              {mobileMenuOpen ? (
+                <X className="h-5 w-5" />
+              ) : (
+                <Menu className="h-5 w-5" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Navigation */}
+        {mobileMenuOpen && (
+          <div className="mt-2 overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white p-2.5 shadow-[0_8px_30px_rgba(15,23,42,0.08)] md:hidden">
+
+            {/* Home */}
+            <Link
+              to="/"
+              onClick={closeMobileMenu}
+              className={navItemClass(isHome)}
+            >
+              <Home className="h-4 w-4" />
+              <span>Home</span>
+            </Link>
+
+            {isAuthenticated ? (
               <>
+                {/* Dashboard */}
                 <Link
                   to="/dashboard"
-                  id="header-nav-dashboard"
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg text-emerald-800 bg-emerald-50 hover:bg-emerald-100 transition-colors"
+                  onClick={closeMobileMenu}
+                  className={`mt-1 ${navItemClass(
+                    location.pathname === '/dashboard'
+                  )}`}
                 >
-                  <LayoutDashboard className="w-4 h-4 text-emerald-700" />
-                  Dashboard
+                  <LayoutDashboard className="h-4 w-4" />
+                  <span>Dashboard</span>
                 </Link>
-                <div className="h-4 w-px bg-slate-200 mx-1"></div>
+
+                {/* Logout */}
                 <button
-                  onClick={() => signOut()}
-                  id="header-nav-logout"
-                  className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                  type="button"
+                  onClick={() => {
+                    closeMobileMenu();
+                    signOut();
+                  }}
+                  className="mt-1 flex w-full cursor-pointer items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
                 >
-                  <LogOut className="w-4 h-4" />
-                  Logout
+                  <LogOut className="h-4 w-4" />
+                  <span>Logout</span>
                 </button>
               </>
             ) : (
               <>
-                {isAuthPage && onSelectMode ? (
-                  <button
-                    onClick={() => handleModeClick('login')}
-                    id="header-btn-login-mode"
-                    className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg transition-all ${
-                      currentMode === 'login'
-                        ? 'text-emerald-800 bg-emerald-50 font-semibold'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                    }`}
-                  >
-                    <LogIn className="w-4 h-4" />
-                    Login
-                  </button>
-                ) : (
-                  <Link
-                    to="/login"
-                    id="header-link-login"
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
-                  >
-                    <LogIn className="w-4 h-4" />
-                    Login
-                  </Link>
-                )}
+                {/* Login */}
+                <Link
+                  to="/login"
+                  onClick={() => {
+                    closeMobileMenu();
+                    handleAuthMode('login');
+                  }}
+                  className="mt-1 flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-medium text-[#2D6A4F] transition-colors hover:bg-[#F3F8F5]"
+                >
+                  <LogIn className="h-4 w-4" />
+                  <span>Login</span>
+                </Link>
 
-                {isAuthPage && onSelectMode ? (
-                  <button
-                    onClick={() => handleModeClick('signup')}
-                    id="header-btn-signup-mode"
-                    className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg shadow-sm transition-all ${
-                      currentMode === 'signup'
-                        ? 'text-white bg-emerald-700 hover:bg-emerald-800 shadow-emerald-700/20'
-                        : 'text-emerald-800 bg-emerald-50 hover:bg-emerald-100'
-                    }`}
-                  >
-                    <UserPlus className="w-4 h-4" />
-                    Sign Up
-                  </button>
-                ) : (
-                  <Link
-                    to="/signup"
-                    id="header-link-signup"
-                    className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg shadow-sm shadow-emerald-700/20 transition-colors"
-                  >
-                    <UserPlus className="w-4 h-4" />
-                    Sign Up
-                  </Link>
-                )}
+                {/* Sign Up */}
+                <Link
+                  to="/signup"
+                  onClick={() => {
+                    closeMobileMenu();
+                    handleAuthMode('signup');
+                  }}
+                  className="mt-1 flex items-center gap-2 rounded-xl bg-[#2D6A4F] px-3.5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#24583F]"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  <span>Sign Up</span>
+                </Link>
               </>
             )}
-          </nav>
-
-          {/* Mobile menu toggle */}
-          <div className="flex md:hidden items-center">
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              id="header-mobile-toggle"
-              className="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-              aria-label="Toggle navigation menu"
-            >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
           </div>
-        </div>
+        )}
       </div>
-
-      {/* Mobile menu dropdown */}
-      {mobileMenuOpen && (
-        <div id="header-mobile-menu" className="md:hidden border-t border-slate-200 bg-white px-4 pt-2 pb-4 space-y-2">
-          <Link
-            to="/"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block px-3 py-2 rounded-lg text-base font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Home
-          </Link>
-          {user ? (
-            <>
-              <Link
-                to="/dashboard"
-                onClick={() => setMobileMenuOpen(false)}
-                className="block px-3 py-2 rounded-lg text-base font-medium text-emerald-800 bg-emerald-50"
-              >
-                Dashboard
-              </Link>
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  signOut();
-                }}
-                className="w-full text-left px-3 py-2 text-base font-medium text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-2"
-              >
-                <LogOut className="w-4 h-4" />
-                Logout
-              </button>
-            </>
-          ) : (
-            <div className="pt-2 border-t border-slate-100 space-y-2">
-              <Link
-                to="/login"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  if (onSelectMode) onSelectMode('login');
-                }}
-                className="block text-center px-4 py-2.5 rounded-lg text-base font-medium text-slate-700 bg-slate-100 hover:bg-slate-200"
-              >
-                Login
-              </Link>
-              <Link
-                to="/signup"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  if (onSelectMode) onSelectMode('signup');
-                }}
-                className="block text-center px-4 py-2.5 rounded-lg text-base font-medium text-white bg-emerald-700 hover:bg-emerald-800"
-              >
-                Sign Up
-              </Link>
-            </div>
-          )}
-        </div>
-      )}
     </header>
   );
 };

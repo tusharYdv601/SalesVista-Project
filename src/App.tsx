@@ -5,7 +5,16 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { PublicRoute } from './components/PublicRoute';
 import { Home } from './pages/Home';
 import { AuthPage } from './pages/AuthPage';
-import { Dashboard } from './pages/Dashboard';
+import { DashboardLayout } from './pages/DashboardLayout';
+import { MainView } from './pages/dashboard/MainView';
+import { StoresView } from './pages/dashboard/StoresView';
+import { CustomersView } from './pages/dashboard/CustomersView';
+import { DemographicsView } from './pages/dashboard/DemographicsView';
+import { ReportsView } from './pages/dashboard/ReportsView';
+import { ForecastingView } from './pages/dashboard/ForecastingView';
+import { SegmentationView } from './pages/dashboard/SegmentationView';
+import { AnomaliesView } from './pages/dashboard/AnomaliesView';
+import { SettingsView } from './pages/dashboard/SettingsView';
 
 export default function App() {
   return (
@@ -39,10 +48,20 @@ export default function App() {
               path="/dashboard"
               element={
                 <ProtectedRoute>
-                  <Dashboard />
+                  <DashboardLayout />
                 </ProtectedRoute>
               }
-            />
+            >
+              <Route index element={<MainView />} />
+              <Route path="stores" element={<StoresView />} />
+              <Route path="customers" element={<CustomersView />} />
+              <Route path="demographics" element={<DemographicsView />} />
+              <Route path="reports" element={<ReportsView />} />
+              <Route path="forecasting" element={<ForecastingView />} />
+              <Route path="segmentation" element={<SegmentationView />} />
+              <Route path="anomalies" element={<AnomaliesView />} />
+              <Route path="settings" element={<SettingsView />} />
+            </Route>
 
             {/* Catch-all fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
