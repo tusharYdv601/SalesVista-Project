@@ -8,7 +8,6 @@ import {
   ShieldCheck,
   ArrowRight,
   CheckCircle2,
-  BookOpen,
   Layers,
   BarChart3,
   TrendingUp,
