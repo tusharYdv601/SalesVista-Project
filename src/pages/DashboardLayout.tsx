@@ -71,6 +71,11 @@ export const DashboardLayout: React.FC = () => {
           title: 'Workspace Settings',
           subtitle: 'Manage user session authentication and workspace parameters.'
         };
+      case 'import':
+        return {
+          title: 'Data Import Center',
+          subtitle: 'Insert new transactions, upload CSVs, and manage your dataset.'
+        };
       default:
         return {
           title: 'Dashboard',
