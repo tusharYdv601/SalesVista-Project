@@ -1,0 +1,6 @@
+{
+  "name": "Comparative Sales Analysis",
+  "description": "Comparative Sales Analysis of Stores, Customers and Demographics using Supabase and React.js",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
