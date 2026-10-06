@@ -1,21 +1,137 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Building2, Users, TrendingUp, ShieldCheck, Database, DollarSign, ShoppingCart, Store, PieChart, Layers, AlertTriangle, BarChart3 } from 'lucide-react';
+import { Sparkles, Building2, Users, TrendingUp, ShieldCheck, Database, DollarSign, ShoppingCart, Store, PieChart, Layers, AlertTriangle, BarChart3, RefreshCw } from 'lucide-react';
 import { KpiCard } from '../../components/KpiCard';
 import { AnalysisCard } from '../../components/AnalysisCard';
 import { ResearchCard } from '../../components/ResearchCard';
+import { DateRangePicker, DateRangePreset } from '../../components/DateRangePicker';
 import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../lib/supabase';
 
 export const MainView: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const userFullName = user?.user_metadata?.full_name || user?.user_metadata?.name || 'hello';
+  const userFullName = user?.user_metadata?.full_name || user?.user_metadata?.name || 'User';
+
+  const [kpis, setKpis] = useState({ 
+    sales: 0, orders: 0, customers: 0, stores: 0, avgOrderValue: 0,
+    trends: { sales: 0, orders: 0, customers: 0, aov: 0, show: false }
+  });
+  const [loading, setLoading] = useState(true);
+  const [currentRange, setCurrentRange] = useState({
+    preset: 'all',
+    label: 'All Time (Full Dataset)',
+    startDate: '2000-01-01',
+    endDate: '2099-12-31'
+  });
+
+  const fetchKpis = async () => {
+    setLoading(true);
+    try {
+      // 1. Fetch current period
+      const { data, error } = await supabase.rpc('get_kpis', { 
+        start_date: currentRange.startDate, 
+        end_date: currentRange.endDate 
+      });
+      if (error) throw error;
+      
+      // 2. Fetch previous period for trend calculation
+      let prevData = null;
+      if (currentRange.preset !== 'all') {
+        const start = new Date(currentRange.startDate);
+        const end = new Date(currentRange.endDate);
+        const diffDays = Math.round(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        
+        const prevEnd = new Date(start);
+        prevEnd.setDate(prevEnd.getDate() - 1);
+        
+        const prevStart = new Date(prevEnd);
+        prevStart.setDate(prevStart.getDate() - diffDays + 1);
+
+        const { data: pData } = await supabase.rpc('get_kpis', { 
+          start_date: prevStart.toISOString().split('T')[0], 
+          end_date: prevEnd.toISOString().split('T')[0]
+        });
+        prevData = pData;
+      }
+      
+      if (data && data.length > 0) {
+        const currentSales = Number(data[0].total_sales) || 0;
+        const currentOrders = Number(data[0].total_orders) || 0;
+        const currentCustomers = Number(data[0].total_customers) || 0;
+        const currentStores = Number(data[0].total_stores) || 0;
+        const currentAov = Number(data[0].avg_order_value) || 0;
+
+        let salesTrend = 0;
+        let ordersTrend = 0;
+        let customersTrend = 0;
+        let aovTrend = 0;
+
+        if (prevData && prevData.length > 0) {
+          const prevSales = Number(prevData[0].total_sales) || 0;
+          const prevOrders = Number(prevData[0].total_orders) || 0;
+          const prevCustomers = Number(prevData[0].total_customers) || 0;
+          const prevAov = Number(prevData[0].avg_order_value) || 0;
+
+          salesTrend = prevSales > 0 ? ((currentSales - prevSales) / prevSales) * 100 : (currentSales > 0 ? 100 : 0);
+          ordersTrend = prevOrders > 0 ? ((currentOrders - prevOrders) / prevOrders) * 100 : (currentOrders > 0 ? 100 : 0);
+          customersTrend = prevCustomers > 0 ? ((currentCustomers - prevCustomers) / prevCustomers) * 100 : (currentCustomers > 0 ? 100 : 0);
+          aovTrend = currentAov - prevAov; // Absolute dollar amount for AOV trend
+        }
+
+        setKpis({
+          sales: currentSales,
+          orders: currentOrders,
+          customers: currentCustomers,
+          stores: currentStores,
+          avgOrderValue: currentAov,
+          trends: {
+            sales: salesTrend,
+            orders: ordersTrend,
+            customers: customersTrend,
+            aov: aovTrend,
+            show: currentRange.preset !== 'all' && (salesTrend !== 0 || ordersTrend !== 0 || customersTrend !== 0 || aovTrend !== 0)
+          }
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching KPIs:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchKpis();
+    }
+  }, [user, currentRange]);
+
+  const formatCurrency = (val: number, fractionDigits: number = 0) => 
+    new Intl.NumberFormat('en-US', { 
+      style: 'currency', 
+      currency: 'USD', 
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits 
+    }).format(val);
+
+  const formatTrendPct = (val: number) => {
+    if (val === 0) return undefined;
+    const sign = val > 0 ? '+' : '';
+    return `${sign}${val.toFixed(1)}%`;
+  };
+
+  const formatTrendAbs = (val: number) => {
+    if (val === 0) return undefined;
+    const sign = val > 0 ? '+' : '-';
+    return `${sign}${formatCurrency(Math.abs(val), 2)}`;
+  };
 
   return (
     <div className="space-y-7" id="dashboard-main-view">
       
-      {/* 1. BALANCED WELCOME HERO CARD (TWO-COLUMN DESKTOP LAYOUT) */}
+      {/* 1. BALANCED WELCOME HERO CARD */}
       <div className="bg-white rounded-2xl p-6 sm:p-7 lg:p-8 border border-slate-200/80 shadow-xs" id="welcome-card">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
           
@@ -39,22 +155,21 @@ export const MainView: React.FC = () => {
             <div className="pt-2 flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                onClick={() => navigate('/dashboard/stores')}
-                id="welcome-stores-btn"
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#2d6a4f] hover:bg-[#23533e] text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                onClick={() => navigate('/dashboard/import')}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
               >
-                <Building2 className="w-4 h-4" />
-                <span>Stores Analysis</span>
+                <Database className="w-4 h-4" />
+                <span>Import Data</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => navigate('/dashboard/customers')}
-                id="welcome-customers-btn"
+                onClick={() => navigate('/dashboard/stores')}
+                id="welcome-stores-btn"
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold transition-colors cursor-pointer"
               >
-                <Users className="w-4 h-4 text-slate-600" />
-                <span>Customer Data</span>
+                <Building2 className="w-4 h-4 text-slate-600" />
+                <span>Stores Analysis</span>
               </button>
 
               <button
@@ -77,7 +192,7 @@ export const MainView: React.FC = () => {
               </span>
               <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#2d6a4f]">
                 <ShieldCheck className="w-3.5 h-3.5" />
-                Supabase
+                Supabase Connected
               </span>
             </div>
 
@@ -86,28 +201,45 @@ export const MainView: React.FC = () => {
                 Welcome back, {userFullName} 👋
               </div>
               <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                Your sales analytics workspace is ready.
+                Your live database connection is active.
               </p>
             </div>
 
             <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-500">
-              <span>Status</span>
-              <span className="font-semibold text-emerald-700">Authenticated &amp; Ready</span>
+              <span>Database Status</span>
+              <span className="font-semibold text-emerald-700">Online</span>
             </div>
           </div>
 
         </div>
       </div>
 
-      {/* 2. KEY PERFORMANCE INDICATORS */}
-      <div className="space-y-3.5" id="kpi-section">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-            Key Performance Indicators
-          </h3>
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-slate-200/80 text-[11px] font-medium text-slate-500 shadow-2xs">
-            <Database className="w-3 h-3 text-[#2d6a4f]" />
-            <span>Data status: Ready</span>
+      {/* 2. EXECUTIVE PERFORMANCE OVERVIEW & KPIs */}
+      <div className="space-y-4" id="kpi-section">
+        {/* Header Panel with Date Picker */}
+        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900 tracking-tight">
+              Executive Performance Overview
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Querying get_kpis() and active transactions
+            </p>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={fetchKpis}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 p-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-400 hover:text-emerald-600 transition-colors disabled:opacity-50 shadow-sm"
+              title="Refresh Data"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-emerald-600' : ''}`} />
+            </button>
+            <DateRangePicker 
+              currentRange={currentRange as any} 
+              onChange={(range) => setCurrentRange(range as any)} 
+            />
           </div>
         </div>
 
@@ -115,45 +247,49 @@ export const MainView: React.FC = () => {
           <KpiCard
             id="kpi-total-sales"
             title="Total Sales"
-            value="--"
-            description="Revenue generated"
-            statusText="No data"
+            value={loading ? '...' : formatCurrency(kpis.sales)}
+            description="Net revenue in period"
             icon={DollarSign}
-            iconBgColor="bg-[#e8f3ed]"
-            iconTextColor="text-[#2d6a4f]"
+            iconBgColor="bg-emerald-50"
+            iconTextColor="text-emerald-600"
+            trend={kpis.trends.show ? formatTrendPct(kpis.trends.sales) : undefined}
+            trendDirection={kpis.trends.sales >= 0 ? 'up' : 'down'}
           />
 
           <KpiCard
             id="kpi-total-orders"
             title="Total Orders"
-            value="--"
+            value={loading ? '...' : kpis.orders.toLocaleString()}
             description="Completed transactions"
-            statusText="No data"
             icon={ShoppingCart}
-            iconBgColor="bg-blue-50"
-            iconTextColor="text-blue-600"
+            iconBgColor="bg-indigo-50"
+            iconTextColor="text-indigo-600"
+            trend={kpis.trends.show ? formatTrendPct(kpis.trends.orders) : undefined}
+            trendDirection={kpis.trends.orders >= 0 ? 'up' : 'down'}
+          />
+
+          <KpiCard
+            id="kpi-avg-order-value"
+            title="Avg Order Value"
+            value={loading ? '...' : formatCurrency(kpis.avgOrderValue, 2)}
+            description="Basket size per checkout"
+            icon={TrendingUp}
+            iconBgColor="bg-sky-50"
+            iconTextColor="text-sky-600"
+            trend={kpis.trends.show ? formatTrendAbs(kpis.trends.aov) : undefined}
+            trendDirection={kpis.trends.aov >= 0 ? 'up' : 'down'}
           />
 
           <KpiCard
             id="kpi-total-customers"
             title="Total Customers"
-            value="--"
-            description="Registered customers"
-            statusText="No data"
+            value={loading ? '...' : kpis.customers.toLocaleString()}
+            description={`Across ${kpis.stores || 0} stores`}
             icon={Users}
-            iconBgColor="bg-purple-50"
-            iconTextColor="text-purple-600"
-          />
-
-          <KpiCard
-            id="kpi-active-stores"
-            title="Active Stores"
-            value="--"
-            description="Stores in dataset"
-            statusText="No data"
-            icon={Store}
-            iconBgColor="bg-amber-50"
-            iconTextColor="text-amber-600"
+            iconBgColor="bg-fuchsia-50"
+            iconTextColor="text-fuchsia-600"
+            trend={kpis.trends.show ? formatTrendPct(kpis.trends.customers) : undefined}
+            trendDirection={kpis.trends.customers >= 0 ? 'up' : 'down'}
           />
         </div>
       </div>

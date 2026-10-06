@@ -15,7 +15,8 @@ import {
   TrendingUp,
   Layers,
   AlertTriangle,
-  Pin
+  Pin,
+  Database
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -28,7 +29,8 @@ export type NavItemKey =
   | 'forecasting'
   | 'segmentation'
   | 'anomalies'
-  | 'settings';
+  | 'settings'
+  | 'import';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -72,6 +74,12 @@ export const navSections: NavSection[] = [
       { key: 'forecasting', label: 'Sales Forecasting', icon: TrendingUp, badge: 'AI', badgeColor: 'bg-emerald-100 text-emerald-800' },
       { key: 'segmentation', label: 'Customer Segmentation', icon: Layers, badge: 'ML', badgeColor: 'bg-blue-100 text-blue-800' },
       { key: 'anomalies', label: 'Anomaly Detection', icon: AlertTriangle, badge: 'Detection', badgeColor: 'bg-amber-100 text-amber-800' },
+    ],
+  },
+  {
+    title: 'DATA MANAGEMENT',
+    items: [
+      { key: 'import', label: 'Data Import', icon: Database },
     ],
   },
   {

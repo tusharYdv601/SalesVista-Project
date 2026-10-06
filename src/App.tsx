@@ -14,6 +14,7 @@ import { ReportsView } from './pages/dashboard/ReportsView';
 import { ForecastingView } from './pages/dashboard/ForecastingView';
 import { SegmentationView } from './pages/dashboard/SegmentationView';
 import { AnomaliesView } from './pages/dashboard/AnomaliesView';
+import { DataImportView } from './pages/dashboard/DataImportView';
 import { SettingsView } from './pages/dashboard/SettingsView';
 
 export default function App() {
@@ -60,6 +61,7 @@ export default function App() {
               <Route path="forecasting" element={<ForecastingView />} />
               <Route path="segmentation" element={<SegmentationView />} />
               <Route path="anomalies" element={<AnomaliesView />} />
+              <Route path="import" element={<DataImportView />} />
               <Route path="settings" element={<SettingsView />} />
             </Route>
 
