@@ -23,6 +23,5 @@ dist-ssr
 *.sln
 *.sw?
 
-# Sample Data
-sample_csv_data/
-
+# Secrets
+.env
