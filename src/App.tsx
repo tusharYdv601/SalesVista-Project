@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -6,16 +6,20 @@ import { PublicRoute } from './components/PublicRoute';
 import { Home } from './pages/Home';
 import { AuthPage } from './pages/AuthPage';
 import { DashboardLayout } from './pages/DashboardLayout';
-import { MainView } from './pages/dashboard/MainView';
-import { StoresView } from './pages/dashboard/StoresView';
-import { CustomersView } from './pages/dashboard/CustomersView';
-import { DemographicsView } from './pages/dashboard/DemographicsView';
-import { ReportsView } from './pages/dashboard/ReportsView';
-import { ForecastingView } from './pages/dashboard/ForecastingView';
-import { SegmentationView } from './pages/dashboard/SegmentationView';
-import { AnomaliesView } from './pages/dashboard/AnomaliesView';
-import { DataImportView } from './pages/dashboard/DataImportView';
-import { SettingsView } from './pages/dashboard/SettingsView';
+
+const lazyView = (name: string, load: () => Promise<Record<string, React.ComponentType>>) =>
+  lazy(() => load().then(m => ({ default: m[name] })));
+
+const MainView = lazyView('MainView', () => import('./pages/dashboard/MainView'));
+const StoresView = lazyView('StoresView', () => import('./pages/dashboard/StoresView'));
+const CustomersView = lazyView('CustomersView', () => import('./pages/dashboard/CustomersView'));
+const DemographicsView = lazyView('DemographicsView', () => import('./pages/dashboard/DemographicsView'));
+const ReportsView = lazyView('ReportsView', () => import('./pages/dashboard/ReportsView'));
+const ForecastingView = lazyView('ForecastingView', () => import('./pages/dashboard/ForecastingView'));
+const SegmentationView = lazyView('SegmentationView', () => import('./pages/dashboard/SegmentationView'));
+const AnomaliesView = lazyView('AnomaliesView', () => import('./pages/dashboard/AnomaliesView'));
+const DataImportView = lazyView('DataImportView', () => import('./pages/dashboard/DataImportView'));
+const SettingsView = lazyView('SettingsView', () => import('./pages/dashboard/SettingsView'));
 
 export default function App() {
   return (

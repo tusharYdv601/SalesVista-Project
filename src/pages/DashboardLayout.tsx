@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
 import { DashboardHeader } from '../components/DashboardHeader';
+import { PageLoader } from '../components/PageLoader';
 
 export const DashboardLayout: React.FC = () => {
   const location = useLocation();
@@ -110,7 +111,9 @@ export const DashboardLayout: React.FC = () => {
 
         {/* ================= MAIN BODY CONTAINER (MAX-WIDTH 1400PX) ================= */}
         <main className="flex-1 p-5 sm:p-7 lg:p-8 max-w-[1400px] w-full mx-auto space-y-7" id="dashboard-content">
-          <Outlet />
+          <Suspense fallback={<PageLoader fullScreen={false} />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>

@@ -23,6 +23,8 @@ const SKU_BASE_PRICES: { [key: string]: number } = {
   'SKU-003': 79.99,
 };
 
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000';
+
 export const ForecastingView: React.FC = () => {
   const [horizon, setHorizon] = useState<number>(30);
   const [echelon, setEchelon] = useState<EchelonLevel>('sku');
@@ -32,6 +34,7 @@ export const ForecastingView: React.FC = () => {
   const [data, setData] = useState<ForecastDataPoint[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState<number>(0);
 
   // Scenario Simulator Controls
   const [simulatedPriceChange, setSimulatedPriceChange] = useState<number>(0);
@@ -42,31 +45,34 @@ export const ForecastingView: React.FC = () => {
   const [leadTimeDays, setLeadTimeDays] = useState<number>(5);
   const [serviceLevelZ, setServiceLevelZ] = useState<number>(1.65);
 
-  const fetchForecast = async () => {
+  useEffect(() => {
+    const controller = new AbortController();
     setLoading(true);
     setError(null);
-    try {
-      const response = await fetch('http://127.0.0.1:8000/api/forecast', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ horizon_days: horizon, history: [] })
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch from AI Forecasting Engine');
-      }
-      const resData = await response.json();
-      setData(resData.data);
-    } catch (err: any) {
-      setError(err.message || 'Error connecting to model backend.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  useEffect(() => {
-    fetchForecast();
-  }, [horizon]);
+    fetch(`${API_URL}/api/forecast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ horizon_days: horizon, history: [] }),
+      signal: controller.signal,
+    })
+      .then(async res => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? 'Failed to fetch from AI Forecasting Engine');
+        }
+        return res.json();
+      })
+      .then(json => setData(json.data))
+      .catch((err: Error) => {
+        if (err.name !== 'AbortError') setError(err.message || 'Error connecting to model backend.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => controller.abort(); // cancel stale request when horizon changes / unmount
+  }, [horizon, reloadKey]);
 
   const availableCategories = useMemo(() => Array.from(new Set(data.map(d => d.category))), [data]);
   const availableSkus = useMemo(() => Array.from(new Set(data.map(d => d.sku_id))), [data]);
@@ -282,7 +288,7 @@ export const ForecastingView: React.FC = () => {
             </button>
 
             <button 
-              onClick={fetchForecast}
+              onClick={() => setReloadKey(k => k + 1)}
               disabled={loading}
               className="flex items-center gap-2 px-4 py-2 bg-[#2d6a4f] hover:bg-[#245740] text-white rounded-xl text-xs sm:text-sm font-semibold transition disabled:opacity-50 shadow-xs cursor-pointer"
             >
