@@ -6,7 +6,7 @@ import {
   BookmarkCheck,
   Check,
   CheckCircle2,
-  DollarSign,
+  IndianRupee,
   Filter,
   Network,
   Percent,
@@ -343,7 +343,7 @@ export const AnomaliesView: React.FC = () => {
             <p className="text-[11px] text-slate-500 mt-0.5">Discount erosion below floor</p>
           </div>
           <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-600">
-            <DollarSign className="w-5 h-5" />
+            <IndianRupee className="w-5 h-5" />
           </div>
         </div>
 
