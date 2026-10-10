@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Building2, Users, TrendingUp, ShieldCheck, Database, DollarSign, ShoppingCart, Store, PieChart, Layers, AlertTriangle, BarChart3, RefreshCw } from 'lucide-react';
+import { Sparkles, Building2, Users, TrendingUp, ShieldCheck, Database, IndianRupee, ShoppingCart, Store, PieChart, Layers, AlertTriangle, BarChart3, RefreshCw } from 'lucide-react';
 import { KpiCard } from '../../components/KpiCard';
 import { AnalysisCard } from '../../components/AnalysisCard';
 import { ResearchCard } from '../../components/ResearchCard';
@@ -29,12 +29,51 @@ export const MainView: React.FC = () => {
   const fetchKpis = async () => {
     setLoading(true);
     try {
-      // 1. Fetch current period
+      let currentSales = 0;
+      let currentOrders = 0;
+      let currentCustomers = 0;
+      let currentStores = 0;
+      let currentAov = 0;
+
+      // 1. Fetch current period via RPC
       const { data, error } = await supabase.rpc('get_kpis', { 
         start_date: currentRange.startDate, 
         end_date: currentRange.endDate 
       });
-      if (error) throw error;
+
+      if (!error && data && data.length > 0 && (Number(data[0].total_orders) > 0 || Number(data[0].total_stores) > 0)) {
+        currentSales = Number(data[0].total_sales) || 0;
+        currentOrders = Number(data[0].total_orders) || 0;
+        currentCustomers = Number(data[0].total_customers) || 0;
+        currentStores = Number(data[0].total_stores) || 0;
+        currentAov = Number(data[0].avg_order_value) || 0;
+      } else if (user?.id) {
+        // Direct multi-tenant query fallback strictly scoped to authenticated user
+        let txQ = supabase
+          .from('sales_transactions')
+          .select('id, total_amount, customer_id, store_id')
+          .eq('owner_id', user.id);
+
+        if (currentRange.preset !== 'all') {
+          txQ = txQ
+            .gte('transaction_date', `${currentRange.startDate}T00:00:00.000Z`)
+            .lte('transaction_date', `${currentRange.endDate}T23:59:59.999Z`);
+        }
+
+        const [txRes, custRes, storeRes] = await Promise.all([
+          txQ,
+          supabase.from('customers').select('id', { count: 'exact', head: true }).eq('owner_id', user.id),
+          supabase.from('stores').select('id', { count: 'exact', head: true }).eq('owner_id', user.id),
+        ]);
+
+        if (txRes.data) {
+          currentOrders = txRes.data.length;
+          currentSales = txRes.data.reduce((sum: number, t: any) => sum + (Number(t.total_amount) || 0), 0);
+          currentAov = currentOrders > 0 ? currentSales / currentOrders : 0;
+        }
+        currentCustomers = custRes.count || 0;
+        currentStores = storeRes.count || 0;
+      }
       
       // 2. Fetch previous period for trend calculation
       let prevData = null;
@@ -56,45 +95,37 @@ export const MainView: React.FC = () => {
         prevData = pData;
       }
       
-      if (data && data.length > 0) {
-        const currentSales = Number(data[0].total_sales) || 0;
-        const currentOrders = Number(data[0].total_orders) || 0;
-        const currentCustomers = Number(data[0].total_customers) || 0;
-        const currentStores = Number(data[0].total_stores) || 0;
-        const currentAov = Number(data[0].avg_order_value) || 0;
+      let salesTrend = 0;
+      let ordersTrend = 0;
+      let customersTrend = 0;
+      let aovTrend = 0;
 
-        let salesTrend = 0;
-        let ordersTrend = 0;
-        let customersTrend = 0;
-        let aovTrend = 0;
+      if (prevData && prevData.length > 0) {
+        const prevSales = Number(prevData[0].total_sales) || 0;
+        const prevOrders = Number(prevData[0].total_orders) || 0;
+        const prevCustomers = Number(prevData[0].total_customers) || 0;
+        const prevAov = Number(prevData[0].avg_order_value) || 0;
 
-        if (prevData && prevData.length > 0) {
-          const prevSales = Number(prevData[0].total_sales) || 0;
-          const prevOrders = Number(prevData[0].total_orders) || 0;
-          const prevCustomers = Number(prevData[0].total_customers) || 0;
-          const prevAov = Number(prevData[0].avg_order_value) || 0;
-
-          salesTrend = prevSales > 0 ? ((currentSales - prevSales) / prevSales) * 100 : (currentSales > 0 ? 100 : 0);
-          ordersTrend = prevOrders > 0 ? ((currentOrders - prevOrders) / prevOrders) * 100 : (currentOrders > 0 ? 100 : 0);
-          customersTrend = prevCustomers > 0 ? ((currentCustomers - prevCustomers) / prevCustomers) * 100 : (currentCustomers > 0 ? 100 : 0);
-          aovTrend = currentAov - prevAov; // Absolute dollar amount for AOV trend
-        }
-
-        setKpis({
-          sales: currentSales,
-          orders: currentOrders,
-          customers: currentCustomers,
-          stores: currentStores,
-          avgOrderValue: currentAov,
-          trends: {
-            sales: salesTrend,
-            orders: ordersTrend,
-            customers: customersTrend,
-            aov: aovTrend,
-            show: currentRange.preset !== 'all' && (salesTrend !== 0 || ordersTrend !== 0 || customersTrend !== 0 || aovTrend !== 0)
-          }
-        });
+        salesTrend = prevSales > 0 ? ((currentSales - prevSales) / prevSales) * 100 : (currentSales > 0 ? 100 : 0);
+        ordersTrend = prevOrders > 0 ? ((currentOrders - prevOrders) / prevOrders) * 100 : (currentOrders > 0 ? 100 : 0);
+        customersTrend = prevCustomers > 0 ? ((currentCustomers - prevCustomers) / prevCustomers) * 100 : (currentCustomers > 0 ? 100 : 0);
+        aovTrend = currentAov - prevAov; // Absolute dollar amount for AOV trend
       }
+
+      setKpis({
+        sales: currentSales,
+        orders: currentOrders,
+        customers: currentCustomers,
+        stores: currentStores,
+        avgOrderValue: currentAov,
+        trends: {
+          sales: salesTrend,
+          orders: ordersTrend,
+          customers: customersTrend,
+          aov: aovTrend,
+          show: currentRange.preset !== 'all' && (salesTrend !== 0 || ordersTrend !== 0 || customersTrend !== 0 || aovTrend !== 0)
+        }
+      });
     } catch (err) {
       console.error('Error fetching KPIs:', err);
     } finally {
@@ -109,12 +140,12 @@ export const MainView: React.FC = () => {
   }, [user, currentRange]);
 
   const formatCurrency = (val: number, fractionDigits: number = 0) => 
-    new Intl.NumberFormat('en-US', { 
+    new Intl.NumberFormat('en-IN', { 
       style: 'currency', 
-      currency: 'USD', 
+      currency: 'INR', 
       minimumFractionDigits: fractionDigits,
       maximumFractionDigits: fractionDigits 
-    }).format(val);
+    }).format(val || 0);
 
   const formatTrendPct = (val: number) => {
     if (val === 0) return undefined;
@@ -249,7 +280,7 @@ export const MainView: React.FC = () => {
             title="Total Sales"
             value={loading ? '...' : formatCurrency(kpis.sales)}
             description="Net revenue in period"
-            icon={DollarSign}
+            icon={IndianRupee}
             iconBgColor="bg-emerald-50"
             iconTextColor="text-emerald-600"
             trend={kpis.trends.show ? formatTrendPct(kpis.trends.sales) : undefined}

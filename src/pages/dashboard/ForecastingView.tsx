@@ -5,7 +5,7 @@ import {
 import { 
   TrendingUp, AlertTriangle, Layers, ShieldCheck, RefreshCw, Sliders, 
   Percent, ArrowUpRight, ArrowDownRight, Package, Download, Clock, Building2, Grid, Tag,
-  GitFork, ArrowRightLeft, DollarSign, Activity, BarChart3, AlertCircle
+  GitFork, ArrowRightLeft, IndianRupee, Activity, BarChart3, AlertCircle
 } from 'lucide-react';
 import { ForecastDataPoint } from '../../types';
 
@@ -236,7 +236,7 @@ export const ForecastingView: React.FC = () => {
   // CSV Export
   const exportForecastToCSV = () => {
     if (simulatedData.length === 0) return;
-    const headers = ["Date", "Level", "Identifier", "P10 (Min)", "P50 (Median)", "P90 (Max)", "Baseline P50", "Gross Rev ($)", "Net Portfolio Rev ($)"];
+    const headers = ["Date", "Level", "Identifier", "P10 (Min)", "P50 (Median)", "P90 (Max)", "Baseline P50", "Gross Rev (₹)", "Net Portfolio Rev (₹)"];
     const rows = simulatedData.map(d => [
       d.date,
       echelon.toUpperCase(),
@@ -397,16 +397,16 @@ export const ForecastingView: React.FC = () => {
             <div className="flex justify-between items-start">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Net Portfolio Rev</span>
               <div className="p-1 rounded-md bg-emerald-50 text-[#2d6a4f]">
-                <DollarSign className="w-3.5 h-3.5" />
+                <IndianRupee className="w-3.5 h-3.5" />
               </div>
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black text-slate-900">${netPortfolioRevenue.toLocaleString()}</span>
+              <span className="text-2xl font-black text-slate-900">₹{netPortfolioRevenue.toLocaleString()}</span>
             </div>
             <div className="text-[11px] text-slate-500 flex justify-between pt-1 border-t border-slate-100">
-              <span>Gross: ${grossSimRevenue.toLocaleString()}</span>
+              <span>Gross: ₹{grossSimRevenue.toLocaleString()}</span>
               {totalCannibalizedRevenue !== 0 ? (
-                <span className="font-semibold text-amber-700">${totalCannibalizedRevenue.toLocaleString()} cannibalized</span>
+                <span className="font-semibold text-amber-700">₹{totalCannibalizedRevenue.toLocaleString()} cannibalized</span>
               ) : (
                 <span className="text-emerald-700 font-semibold">100% Direct</span>
               )}
@@ -483,7 +483,7 @@ export const ForecastingView: React.FC = () => {
               <div className="flex justify-between text-xs font-semibold text-slate-700">
                 <span>Price Adjustment</span>
                 <span className={simulatedPriceChange < 0 ? 'text-emerald-700 font-bold' : simulatedPriceChange > 0 ? 'text-amber-700 font-bold' : 'text-slate-700 font-bold'}>
-                  {simulatedPriceChange > 0 ? `+${simulatedPriceChange}%` : `${simulatedPriceChange}%`} (${effectivePrice.toFixed(2)})
+                  {simulatedPriceChange > 0 ? `+${simulatedPriceChange}%` : `${simulatedPriceChange}%`} (₹{effectivePrice.toFixed(2)})
                 </span>
               </div>
               <input 
@@ -587,7 +587,7 @@ export const ForecastingView: React.FC = () => {
                   ) : (
                     <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
                       <div>Displacement: <span className="font-semibold text-amber-800">{item.volumeDisplacementPct}%</span> ({item.unitsDisplaced} units)</div>
-                      <div>Displaced Rev: <span className="font-semibold text-slate-700">${item.revenueImpact.toLocaleString()}</span></div>
+                      <div>Displaced Rev: <span className="font-semibold text-slate-700">₹{item.revenueImpact.toLocaleString()}</span></div>
                     </div>
                   )}
                 </div>
