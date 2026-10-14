@@ -16,7 +16,8 @@ import {
   Layers,
   AlertTriangle,
   Pin,
-  Database
+  Database,
+  FileEdit
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -30,7 +31,8 @@ export type NavItemKey =
   | 'segmentation'
   | 'anomalies'
   | 'settings'
-  | 'import';
+  | 'import'
+  | 'data-edits';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -80,6 +82,7 @@ export const navSections: NavSection[] = [
     title: 'DATA MANAGEMENT',
     items: [
       { key: 'import', label: 'Data Import', icon: Database },
+      { key: 'data-edits', label: 'Data Edits', icon: FileEdit },
     ],
   },
   {

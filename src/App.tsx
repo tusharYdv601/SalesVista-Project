@@ -19,6 +19,7 @@ const ForecastingView = lazyView('ForecastingView', () => import('./pages/dashbo
 const SegmentationView = lazyView('SegmentationView', () => import('./pages/dashboard/SegmentationView'));
 const AnomaliesView = lazyView('AnomaliesView', () => import('./pages/dashboard/AnomaliesView'));
 const DataImportView = lazyView('DataImportView', () => import('./pages/dashboard/DataImportView'));
+const DataEditView = lazyView('DataEditView', () => import('./pages/dashboard/DataEditView'));
 const SettingsView = lazyView('SettingsView', () => import('./pages/dashboard/SettingsView'));
 
 export default function App() {
@@ -66,6 +67,7 @@ export default function App() {
               <Route path="segmentation" element={<SegmentationView />} />
               <Route path="anomalies" element={<AnomaliesView />} />
               <Route path="import" element={<DataImportView />} />
+              <Route path="data-edits" element={<DataEditView />} />
               <Route path="settings" element={<SettingsView />} />
             </Route>
 
