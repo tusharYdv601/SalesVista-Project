@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Header } from '../components/Header';
 import { ShowcasePanel } from '../components/ShowcasePanel';
 import { FormPanel } from '../components/FormPanel';
-import { Shield, Sparkles, Database, Lock, CheckCircle2 } from 'lucide-react';
+import { Shield, Lock, CheckCircle2 } from 'lucide-react';
 
 interface AuthPageProps {
   defaultMode?: 'login' | 'signup';

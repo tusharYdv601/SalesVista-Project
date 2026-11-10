@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Building2, Users, TrendingUp, ShieldCheck, Database, IndianRupee, ShoppingCart, Store, PieChart, Layers, AlertTriangle, BarChart3, RefreshCw } from 'lucide-react';
+import { Sparkles, Building2, Users, TrendingUp, ShieldCheck, Database, IndianRupee, ShoppingCart, PieChart, Layers, AlertTriangle, BarChart3, RefreshCw } from 'lucide-react';
 import { KpiCard } from '../../components/KpiCard';
 import { AnalysisCard } from '../../components/AnalysisCard';
 import { ResearchCard } from '../../components/ResearchCard';
-import { DateRangePicker, DateRangePreset } from '../../components/DateRangePicker';
+import { DateRangePicker } from '../../components/DateRangePicker';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 
@@ -35,23 +35,11 @@ export const MainView: React.FC = () => {
       let currentStores = 0;
       let currentAov = 0;
 
-      // 1. Fetch current period via RPC
-      const { data, error } = await supabase.rpc('get_kpis', { 
-        start_date: currentRange.startDate, 
-        end_date: currentRange.endDate 
-      });
-
-      if (!error && data && data.length > 0 && (Number(data[0].total_orders) > 0 || Number(data[0].total_stores) > 0)) {
-        currentSales = Number(data[0].total_sales) || 0;
-        currentOrders = Number(data[0].total_orders) || 0;
-        currentCustomers = Number(data[0].total_customers) || 0;
-        currentStores = Number(data[0].total_stores) || 0;
-        currentAov = Number(data[0].avg_order_value) || 0;
-      } else if (user?.id) {
-        // Direct multi-tenant query fallback strictly scoped to authenticated user
+      if (user?.id) {
+        // Direct multi-tenant query strictly scoped to authenticated user
         let txQ = supabase
           .from('sales_transactions')
-          .select('id, total_amount, customer_id, store_id')
+          .select('id, total_amount')
           .eq('owner_id', user.id);
 
         if (currentRange.preset !== 'all') {
@@ -75,9 +63,13 @@ export const MainView: React.FC = () => {
         currentStores = storeRes.count || 0;
       }
       
-      // 2. Fetch previous period for trend calculation
-      let prevData = null;
-      if (currentRange.preset !== 'all') {
+      // 2. Fetch previous period for trend calculation strictly scoped to user
+      let salesTrend = 0;
+      let ordersTrend = 0;
+      let customersTrend = 0;
+      let aovTrend = 0;
+
+      if (user?.id && currentRange.preset !== 'all') {
         const start = new Date(currentRange.startDate);
         const end = new Date(currentRange.endDate);
         const diffDays = Math.round(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
@@ -88,28 +80,22 @@ export const MainView: React.FC = () => {
         const prevStart = new Date(prevEnd);
         prevStart.setDate(prevStart.getDate() - diffDays + 1);
 
-        const { data: pData } = await supabase.rpc('get_kpis', { 
-          start_date: prevStart.toISOString().split('T')[0], 
-          end_date: prevEnd.toISOString().split('T')[0]
-        });
-        prevData = pData;
-      }
-      
-      let salesTrend = 0;
-      let ordersTrend = 0;
-      let customersTrend = 0;
-      let aovTrend = 0;
+        const { data: prevData } = await supabase
+          .from('sales_transactions')
+          .select('id, total_amount')
+          .eq('owner_id', user.id)
+          .gte('transaction_date', `${prevStart.toISOString().split('T')[0]}T00:00:00.000Z`)
+          .lte('transaction_date', `${prevEnd.toISOString().split('T')[0]}T23:59:59.999Z`);
 
-      if (prevData && prevData.length > 0) {
-        const prevSales = Number(prevData[0].total_sales) || 0;
-        const prevOrders = Number(prevData[0].total_orders) || 0;
-        const prevCustomers = Number(prevData[0].total_customers) || 0;
-        const prevAov = Number(prevData[0].avg_order_value) || 0;
+        if (prevData && prevData.length > 0) {
+          const prevOrders = prevData.length;
+          const prevSales = prevData.reduce((sum: number, t: any) => sum + (Number(t.total_amount) || 0), 0);
+          const prevAov = prevOrders > 0 ? prevSales / prevOrders : 0;
 
-        salesTrend = prevSales > 0 ? ((currentSales - prevSales) / prevSales) * 100 : (currentSales > 0 ? 100 : 0);
-        ordersTrend = prevOrders > 0 ? ((currentOrders - prevOrders) / prevOrders) * 100 : (currentOrders > 0 ? 100 : 0);
-        customersTrend = prevCustomers > 0 ? ((currentCustomers - prevCustomers) / prevCustomers) * 100 : (currentCustomers > 0 ? 100 : 0);
-        aovTrend = currentAov - prevAov; // Absolute dollar amount for AOV trend
+          salesTrend = prevSales > 0 ? ((currentSales - prevSales) / prevSales) * 100 : (currentSales > 0 ? 100 : 0);
+          ordersTrend = prevOrders > 0 ? ((currentOrders - prevOrders) / prevOrders) * 100 : (currentOrders > 0 ? 100 : 0);
+          aovTrend = currentAov - prevAov;
+        }
       }
 
       setKpis({
@@ -254,7 +240,7 @@ export const MainView: React.FC = () => {
               Executive Performance Overview
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Querying get_kpis() and active transactions
+              Live multi-tenant metrics across active transactions
             </p>
           </div>
           

@@ -8,7 +8,6 @@ import {
   PieChart, 
   Settings, 
   ChevronLeft, 
-  ChevronRight, 
   LogOut, 
   ShieldCheck, 
   X,
