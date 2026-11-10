@@ -10,7 +10,6 @@ import {
   MapPin,
   Calendar,
   Search,
-  Filter,
   Download,
   RefreshCw,
   PlusCircle,
@@ -18,19 +17,11 @@ import {
   Table as TableIcon,
   X,
   ChevronRight,
-  ChevronUp,
-  ChevronDown,
   Award,
   AlertTriangle,
   CheckCircle2,
-  XCircle,
-  ArrowUpDown,
-  ExternalLink,
-  PieChart as PieChartIcon,
   BarChart3,
   Layers,
-  Percent,
-  Clock,
   UserCheck,
   Globe
 } from 'lucide-react';
@@ -56,8 +47,6 @@ import { StoreRecord, StorePerformanceMetric } from '../../types';
 
 // Theme tokens
 const BRAND_GREEN = '#2d6a4f';
-const LIGHT_GREEN = '#e8f3ed';
-const ACCENT_MINT = '#52b788';
 const PALETTE = ['#2d6a4f', '#40916c', '#52b788', '#74c69d', '#95d5b2', '#b7e4c7', '#d8f3dc'];
 
 export const StoresView: React.FC = () => {

@@ -1,35 +1,34 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
 import { 
   TrendingUp, AlertTriangle, Layers, ShieldCheck, RefreshCw, Sliders, 
   Percent, ArrowUpRight, ArrowDownRight, Package, Download, Clock, Building2, Grid, Tag,
-  GitFork, ArrowRightLeft, IndianRupee, Activity, BarChart3, AlertCircle
+  GitFork, ArrowRightLeft, IndianRupee, Activity, AlertCircle, Database, Sparkles
 } from 'lucide-react';
 import { ForecastDataPoint } from '../../types';
+import { useAuth } from '../../context/AuthContext';
+import { fetchUserSalesHistory, UserSalesHistoryResult } from '../../lib/salesHistoryLoader';
 
 type EchelonLevel = 'sku' | 'category' | 'company';
-
-const CROSS_ELASTICITY_MATRIX: { [key: string]: { [key: string]: number } } = {
-  'SKU-001': { 'SKU-001': -1.45, 'SKU-002': 0.12, 'SKU-003': 0.48 },
-  'SKU-002': { 'SKU-001': 0.08, 'SKU-002': -1.20, 'SKU-003': 0.15 },
-  'SKU-003': { 'SKU-001': 0.52, 'SKU-002': 0.10, 'SKU-003': -1.60 },
-};
-
-const SKU_BASE_PRICES: { [key: string]: number } = {
-  'SKU-001': 49.99,
-  'SKU-002': 199.99,
-  'SKU-003': 79.99,
-};
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000';
 
 export const ForecastingView: React.FC = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [userTxCount, setUserTxCount] = useState<number | null>(null);
+  const [distinctDaysCount, setDistinctDaysCount] = useState<number>(0);
+  const [userHistoryResult, setUserHistoryResult] = useState<UserSalesHistoryResult | null>(null);
+  const [isHistoryLoaded, setIsHistoryLoaded] = useState<boolean>(false);
+  const [showDemoPreview, setShowDemoPreview] = useState<boolean>(false);
+
   const [horizon, setHorizon] = useState<number>(30);
   const [echelon, setEchelon] = useState<EchelonLevel>('sku');
-  const [selectedSku, setSelectedSku] = useState<string>('SKU-001');
-  const [selectedCategory, setSelectedCategory] = useState<string>('Apparel');
+  const [selectedSku, setSelectedSku] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
   
   const [data, setData] = useState<ForecastDataPoint[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -45,7 +44,45 @@ export const ForecastingView: React.FC = () => {
   const [leadTimeDays, setLeadTimeDays] = useState<number>(5);
   const [serviceLevelZ, setServiceLevelZ] = useState<number>(1.65);
 
+  // 1. Fetch user's own sales transactions strictly scoped by owner_id
   useEffect(() => {
+    if (!user?.id) {
+      setUserTxCount(0);
+      setDistinctDaysCount(0);
+      setUserHistoryResult(null);
+      setIsHistoryLoaded(true);
+      return;
+    }
+
+    setIsHistoryLoaded(false);
+    fetchUserSalesHistory(user.id)
+      .then((res) => {
+        setUserTxCount(res.totalTxCount);
+        setDistinctDaysCount(res.distinctDays);
+        setUserHistoryResult(res);
+      })
+      .catch((err) => {
+        console.error('Failed to load user sales history', err);
+        setUserTxCount(0);
+      })
+      .finally(() => {
+        setIsHistoryLoaded(true);
+      });
+  }, [user, reloadKey]);
+
+  // 2. Run forecasting model against user's own transactions or demo preview
+  useEffect(() => {
+    if (!isHistoryLoaded) return;
+
+    const hasRealHistory = userHistoryResult && userHistoryResult.history.length > 0;
+    if (!hasRealHistory && !showDemoPreview) {
+      setData([]);
+      setLoading(false);
+      return;
+    }
+
+    const payloadHistory = hasRealHistory && !showDemoPreview ? userHistoryResult.history : [];
+
     const controller = new AbortController();
     setLoading(true);
     setError(null);
@@ -53,17 +90,17 @@ export const ForecastingView: React.FC = () => {
     fetch(`${API_URL}/api/forecast`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ horizon_days: horizon, history: [] }),
+      body: JSON.stringify({ horizon_days: horizon, history: payloadHistory }),
       signal: controller.signal,
     })
-      .then(async res => {
+      .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => null);
           throw new Error(body?.detail ?? 'Failed to fetch from AI Forecasting Engine');
         }
         return res.json();
       })
-      .then(json => setData(json.data))
+      .then((json) => setData(json.data || []))
       .catch((err: Error) => {
         if (err.name !== 'AbortError') setError(err.message || 'Error connecting to model backend.');
       })
@@ -71,28 +108,50 @@ export const ForecastingView: React.FC = () => {
         if (!controller.signal.aborted) setLoading(false);
       });
 
-    return () => controller.abort(); // cancel stale request when horizon changes / unmount
-  }, [horizon, reloadKey]);
+    return () => controller.abort();
+  }, [horizon, reloadKey, isHistoryLoaded, userHistoryResult, showDemoPreview]);
 
-  const availableCategories = useMemo(() => Array.from(new Set(data.map(d => d.category))), [data]);
-  const availableSkus = useMemo(() => Array.from(new Set(data.map(d => d.sku_id))), [data]);
+  const availableCategories = useMemo(() => Array.from(new Set(data.map((d) => d.category))), [data]);
+  const availableSkus = useMemo(() => Array.from(new Set(data.map((d) => d.sku_id))), [data]);
 
-  const primaryElasticity = CROSS_ELASTICITY_MATRIX[selectedSku]?.[selectedSku] ?? -1.45;
-  const basePrice = SKU_BASE_PRICES[selectedSku] || 50;
+  // Synchronize selected SKU and Category with returned model catalog
+  useEffect(() => {
+    if (availableSkus.length > 0 && !availableSkus.includes(selectedSku)) {
+      setSelectedSku(availableSkus[0]);
+    }
+  }, [availableSkus, selectedSku]);
+
+  useEffect(() => {
+    if (availableCategories.length > 0 && !availableCategories.includes(selectedCategory)) {
+      setSelectedCategory(availableCategories[0]);
+    }
+  }, [availableCategories, selectedCategory]);
+
+  const primaryElasticity = useMemo(() => {
+    const match = data.find((d) => d.sku_id === selectedSku);
+    return match?.elasticity ?? -1.25;
+  }, [data, selectedSku]);
+
+  const basePrice = useMemo(() => {
+    if (selectedSku && userHistoryResult?.skuBasePrices[selectedSku]) {
+      return userHistoryResult.skuBasePrices[selectedSku];
+    }
+    return 0;
+  }, [userHistoryResult, selectedSku]);
   const effectivePrice = basePrice * (1 + simulatedPriceChange / 100);
 
   const cannibalizationDisplacement = useMemo(() => {
     if (!enableCannibalization || simulatedPriceChange === 0) {
-      return availableSkus.map(sku => ({
+      return availableSkus.map((sku) => ({
         sku,
-        crossElasticity: CROSS_ELASTICITY_MATRIX[selectedSku]?.[sku] || 0,
+        crossElasticity: 0,
         volumeDisplacementPct: 0,
         unitsDisplaced: 0,
         revenueImpact: 0,
       }));
     }
 
-    return availableSkus.map(targetSku => {
+    return availableSkus.map((targetSku) => {
       if (targetSku === selectedSku) {
         return {
           sku: targetSku,
@@ -103,15 +162,15 @@ export const ForecastingView: React.FC = () => {
         };
       }
 
-      const crossE = CROSS_ELASTICITY_MATRIX[selectedSku]?.[targetSku] || 0.2;
+      const crossE = Number((Math.abs(primaryElasticity) * 0.15).toFixed(2));
       const volumeDisplacementPct = (crossE * (simulatedPriceChange / 100)) * 100;
       
       const targetBaseDemand = data
-        .filter(d => d.sku_id === targetSku)
+        .filter((d) => d.sku_id === targetSku)
         .reduce((acc, cur) => acc + cur.pred_p50, 0);
 
       const unitsDisplaced = Math.round(targetBaseDemand * (volumeDisplacementPct / 100));
-      const targetPrice = SKU_BASE_PRICES[targetSku] || 50;
+      const targetPrice = userHistoryResult?.skuBasePrices[targetSku] || 0;
       const revenueImpact = Math.round(unitsDisplaced * targetPrice);
 
       return {
@@ -122,9 +181,8 @@ export const ForecastingView: React.FC = () => {
         revenueImpact,
       };
     });
-  }, [data, selectedSku, simulatedPriceChange, enableCannibalization, availableSkus, primaryElasticity]);
+  }, [data, selectedSku, simulatedPriceChange, enableCannibalization, availableSkus, primaryElasticity, userHistoryResult]);
 
-  const totalCannibalizedUnits = cannibalizationDisplacement.reduce((acc, cur) => acc + cur.unitsDisplaced, 0);
   const totalCannibalizedRevenue = cannibalizationDisplacement.reduce((acc, cur) => acc + cur.revenueImpact, 0);
 
   const echelonAggregatedData = useMemo(() => {
@@ -260,16 +318,150 @@ export const ForecastingView: React.FC = () => {
     document.body.removeChild(link);
   };
 
+  if (!isHistoryLoaded) {
+    return (
+      <div className="space-y-6" id="forecasting-tab">
+        <div className="bg-white p-12 rounded-2xl border border-slate-200/80 shadow-xs text-center flex flex-col items-center justify-center space-y-3">
+          <RefreshCw className="w-8 h-8 text-[#2d6a4f] animate-spin" />
+          <p className="text-sm font-semibold text-slate-600">Verifying tenant transaction timeline...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (userTxCount === 0 && !showDemoPreview) {
+    return (
+      <div className="space-y-6" id="forecasting-tab">
+        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 text-[11px] font-bold uppercase tracking-wider mb-1">
+            <TrendingUp className="w-3.5 h-3.5 text-[#2d6a4f]" />
+            Research Module • AI Forecasting
+          </div>
+          <h2 className="text-2xl font-extrabold text-slate-900">Executive Forecasting & Inventory Engine</h2>
+          <p className="text-xs sm:text-sm text-slate-500 max-w-2xl leading-relaxed">
+            Predict SKU demand distributions, model price elasticity, simulate promotions, and calculate optimal reorder points.
+          </p>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-8 sm:p-12 text-center shadow-xs space-y-5">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-emerald-50 text-[#2d6a4f] flex items-center justify-center border border-emerald-100">
+            <TrendingUp className="w-7 h-7" />
+          </div>
+          <div className="max-w-md mx-auto space-y-2">
+            <h3 className="text-xl font-black text-slate-900">No Historical Sales Records</h3>
+            <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+              Your account ({user?.email || 'Active User'}) has not uploaded any sales transactions yet. Historical transaction data is needed to train quantile forecasting and elasticity models.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => navigate('/dashboard/import')}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors cursor-pointer"
+            >
+              <Package className="w-4 h-4" />
+              Import Sales Transactions
+            </button>
+            <button
+              onClick={() => setShowDemoPreview(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+            >
+              <Activity className="w-3.5 h-3.5 text-emerald-600" />
+              Preview Sample SKU Simulation
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (userTxCount !== null && userTxCount > 0 && (!userHistoryResult || userHistoryResult.history.length === 0) && !showDemoPreview) {
+    return (
+      <div className="space-y-6" id="forecasting-tab">
+        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 text-[11px] font-bold uppercase tracking-wider mb-1">
+            <Clock className="w-3.5 h-3.5 text-amber-700" />
+            Insufficient Historical Timeline
+          </div>
+          <h2 className="text-2xl font-extrabold text-slate-900">Additional Sales Dates Needed</h2>
+          <p className="text-xs sm:text-sm text-slate-500 max-w-2xl leading-relaxed">
+            The AI LightGBM model requires at least 3 distinct transaction dates per SKU to estimate seasonality lags and quantile bounds.
+          </p>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-8 sm:p-12 text-center shadow-xs space-y-5">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200">
+            <AlertCircle className="w-7 h-7" />
+          </div>
+          <div className="max-w-md mx-auto space-y-2">
+            <h3 className="text-xl font-black text-slate-900">Need At Least 3 Distinct Days of Sales</h3>
+            <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+              Your account ({user?.email || 'Active User'}) has <strong>{userTxCount}</strong> transactions across <strong>{distinctDaysCount}</strong> day(s). To train the forecasting engine without synthetic benchmarks, import sales spanning 3 or more dates.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => navigate('/dashboard/import')}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors cursor-pointer"
+            >
+              <Package className="w-4 h-4" />
+              Import More Dates
+            </button>
+            <button
+              onClick={() => setShowDemoPreview(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+            >
+              <Activity className="w-3.5 h-3.5 text-amber-600" />
+              Preview Sample SKU Simulation
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6" id="forecasting-tab">
+      {showDemoPreview && (
+        <div className="flex flex-wrap items-center justify-between gap-2 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              <strong>Sample Demonstration Preview:</strong> Simulating benchmark catalog (SKU-001 - SKU-005) because your account has insufficient transaction history. No other user data is accessed.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate('/dashboard/import')}
+              className="font-bold underline text-amber-950 hover:text-black cursor-pointer"
+            >
+              Import Real Data
+            </button>
+            <button
+              onClick={() => setShowDemoPreview(false)}
+              className="text-amber-700 hover:text-amber-900 text-[11px] underline cursor-pointer"
+            >
+              Close Preview
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/80 shadow-xs space-y-6">
         
         {/* Top Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 text-[11px] font-bold uppercase tracking-wider mb-1">
-              <TrendingUp className="w-3.5 h-3.5 text-[#2d6a4f]" />
-              Research Module • AI Forecasting
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 text-[11px] font-bold uppercase tracking-wider">
+                <TrendingUp className="w-3.5 h-3.5 text-[#2d6a4f]" />
+                Research Module • AI Forecasting
+              </div>
+              {userHistoryResult && userHistoryResult.history.length > 0 && !showDemoPreview && (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold">
+                  <Database className="w-3 h-3 text-[#2d6a4f]" />
+                  Live Tenant Model ({userTxCount} Orders • {distinctDaysCount} Dates)
+                </div>
+              )}
             </div>
             <h2 className="text-2xl font-extrabold text-slate-900">Executive Forecasting & Inventory Engine</h2>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">

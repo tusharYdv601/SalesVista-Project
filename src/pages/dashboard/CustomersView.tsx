@@ -2,15 +2,11 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Users,
   UserCheck,
-  UserPlus,
   IndianRupee,
   ShoppingCart,
   TrendingUp,
-  TrendingDown,
-  Clock,
   Calendar,
   Search,
-  Filter,
   Download,
   RefreshCw,
   X,
@@ -18,27 +14,17 @@ import {
   ChevronLeft,
   Award,
   AlertTriangle,
-  CheckCircle2,
-  PieChart as PieChartIcon,
   BarChart3,
-  Layers,
-  ArrowUpDown,
   Mail,
   Phone,
   MapPin,
-  ShieldCheck,
-  Tag,
   Repeat,
-  Sparkles,
-  ExternalLink,
-  Info
+  Sparkles
 } from 'lucide-react';
 import {
   ResponsiveContainer,
   BarChart,
   Bar,
-  AreaChart,
-  Area,
   XAxis,
   YAxis,
   Tooltip,
@@ -55,11 +41,6 @@ import { CustomerRecord, CustomerAnalyticsRecord } from '../../types';
 
 // Theme tokens
 const BRAND_GREEN = '#2D6A4F';
-const DARK_GREEN = '#1E4836';
-const LIGHT_MINT = '#EAF3ED';
-const TEXT_PRIMARY = '#17231D';
-const TEXT_SECONDARY = '#647067';
-const BORDER_COLOR = '#E3E9E4';
 
 const PALETTE = ['#2D6A4F', '#40916C', '#52B788', '#74C69D', '#95D5B2', '#5A7D6C'];
 
