@@ -44,6 +44,7 @@ export interface StoreRecord {
   updated_at?: string;
 }
 
+// Enriched Store Performance Metric with Aggregated Sales
 export interface StorePerformanceMetric extends StoreRecord {
   total_sales: number;
   total_orders: number;
@@ -52,6 +53,7 @@ export interface StorePerformanceMetric extends StoreRecord {
   rank?: number;
 }
 
+// Enterprise Customer Record Schema
 export interface CustomerRecord {
   id: number;
   customer_code: string;
@@ -71,6 +73,7 @@ export interface CustomerRecord {
   updated_at?: string;
 }
 
+// Enriched Customer Profile with Behavioral Analytics & RFM Metrics
 export interface CustomerAnalyticsRecord extends CustomerRecord {
   total_spend: number;
   total_orders: number;
@@ -83,55 +86,4 @@ export interface CustomerAnalyticsRecord extends CustomerRecord {
   derived_segment: 'Champions' | 'Loyal Customers' | 'Potential Loyalists' | 'New Customers' | 'At Risk' | 'Cannot Yet Classify';
   is_repeat: boolean;
   rank?: number;
-}
-
-// --- Reports & Analysis Interfaces ---
-export interface ExecutiveMetric {
-  label: string;
-  value: string;
-  change: string;
-  isPositive: boolean;
-  subtext: string;
-}
-
-export interface ExecutiveTakeaway {
-  id: string;
-  type: 'growth' | 'risk' | 'milestone' | 'neutral';
-  title: string;
-  detail: string;
-  badgeText: string;
-}
-
-export interface VarianceDataPoint {
-  period: string;
-  target: number;
-  actual: number;
-  variancePct: number;
-}
-
-export interface StorePerformanceRanking {
-  storeId: string;
-  storeName: string;
-  region: string;
-  revenue: string;
-  targetAchievementPct: number;
-  status: 'Exceeded' | 'On Track' | 'Underperforming';
-}
-
-export interface AnomalyAuditItem {
-  id: string;
-  date: string;
-  storeName: string;
-  metric: string;
-  deviation: string;
-  suspectedCause: string;
-  status: 'Investigating' | 'Resolved' | 'Action Needed';
-}
-
-export interface CrossDimensionCell {
-  region: string;
-  segment: string;
-  revenue: number;
-  orders: number;
-  health: 'high' | 'medium' | 'low';
 }
