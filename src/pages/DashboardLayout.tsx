@@ -77,6 +77,11 @@ export const DashboardLayout: React.FC = () => {
           title: 'Data Import Center',
           subtitle: 'Insert new transactions, upload CSVs, and manage your dataset.'
         };
+      case 'data-edits':
+        return {
+          title: 'Data Edits & Management',
+          subtitle: 'Directly view, edit, add, and manage records across all your database tables.'
+        };
       default:
         return {
           title: 'Dashboard',

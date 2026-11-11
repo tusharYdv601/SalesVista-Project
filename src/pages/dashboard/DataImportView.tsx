@@ -96,10 +96,15 @@ export const DataImportView: React.FC = () => {
       
       await Promise.all(
         tables.map(async (table) => {
-          const { count, error } = await supabase
+          let countQuery = supabase
             .from(table)
             .select('*', { count: 'exact', head: true });
+
+          if (user?.id) {
+            countQuery = countQuery.eq('owner_id', user.id);
+          }
             
+          const { count, error } = await countQuery;
           if (!error && count !== null) {
             newCounts[table] = count;
           }
@@ -125,6 +130,11 @@ export const DataImportView: React.FC = () => {
   const [dragActive, setDragActive] = useState<Record<string, boolean>>({});
 
   const processFile = (file: File, tableKey: string) => {
+    if (!user) {
+      alert('Authentication required: Please sign in to import data.');
+      return;
+    }
+
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
@@ -136,19 +146,43 @@ export const DataImportView: React.FC = () => {
             return;
           }
 
-          const { error } = await supabase.from(tableKey).insert(data);
-          
-          if (error) {
-            console.error('Supabase error:', error);
-            alert(`Error importing data: ${error.message}`);
-          } else {
-            setUploadedTables(prev => ({ ...prev, [tableKey]: true }));
-            setCounts(prev => ({ ...prev, [tableKey]: prev[tableKey] + data.length }));
-            alert(`Successfully imported ${data.length} rows into ${tableKey}!`);
+          // Multi-tenant security & data integrity:
+          // 1. Force owner_id to current user so rows cannot be associated with any other tenant.
+          // 2. Convert empty strings to null so foreign keys and numeric fields don't throw cast errors.
+          const sanitizedRows = data.map((row: any) => {
+            const cleaned: Record<string, any> = {
+              ...row,
+              owner_id: user.id,
+            };
+            Object.keys(cleaned).forEach((k) => {
+              if (cleaned[k] === '' || cleaned[k] === undefined) {
+                cleaned[k] = null;
+              }
+            });
+            return cleaned;
+          });
+
+          // Insert in chunks of 500 to prevent payload limits
+          const CHUNK_SIZE = 500;
+          let insertedCount = 0;
+
+          for (let i = 0; i < sanitizedRows.length; i += CHUNK_SIZE) {
+            const chunk = sanitizedRows.slice(i, i + CHUNK_SIZE);
+            const { error } = await supabase.from(tableKey).insert(chunk);
+
+            if (error) {
+              console.error('Supabase error on chunk:', error);
+              throw new Error(error.message);
+            }
+            insertedCount += chunk.length;
           }
+
+          setUploadedTables(prev => ({ ...prev, [tableKey]: true }));
+          setCounts(prev => ({ ...prev, [tableKey]: prev[tableKey] + insertedCount }));
+          alert(`Successfully imported ${insertedCount} rows into ${tableKey} for your account!`);
         } catch (err: any) {
           console.error(err);
-          alert('An error occurred during import.');
+          alert(`Error importing data into ${tableKey}: ${err.message || 'An unexpected error occurred.'}`);
         }
       },
       error: (error) => {

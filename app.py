@@ -3,7 +3,6 @@
 Run:  python app.py   (or: uvicorn app:app --reload --port 8000)
 """
 import os
-from functools import lru_cache
 from typing import List, Optional
 
 import lightgbm as lgb
@@ -18,13 +17,6 @@ from sklearn.linear_model import LinearRegression
 
 QUANTILES = (0.10, 0.50, 0.90)
 MIN_HISTORY_DAYS = 3
-DEMO_SKUS = (
-    ("SKU-001", "Apparel", 85, 49.99, 22.0),
-    ("SKU-002", "Electronics", 45, 199.99, 110.0),
-    ("SKU-003", "Footwear", 60, 199.99, 95.0),
-    ("SKU-004", "Apparel", 90, 39.99, 18.0),
-    ("SKU-005", "Electronics", 40, 249.99, 140.0),
-)
 
 app = FastAPI(title="SalesVista AI Analytics Service")
 app.add_middleware(
@@ -350,70 +342,6 @@ def detect_hybrid_anomalies(
 
 
 # ---------------------------------------------------------
-# Demo Data Generation
-# ---------------------------------------------------------
-def demo_history(day: str) -> pd.DataFrame:
-    rng = np.random.default_rng(42)
-    dates = pd.date_range(end=pd.Timestamp(day), periods=120, freq="D")
-    weekend = dates.dayofweek >= 5
-    frames = []
-
-    for sku, cat, base, price, cost in DEMO_SKUS:
-        in_stock = (rng.random(len(dates)) >= 0.08).astype(int)
-        sales = rng.poisson(base * np.where(weekend, 1.3, 1.0)).astype(float) * in_stock
-        unit_prices = np.full(len(dates), price)
-
-        if sku == "SKU-001":
-            sales[30] *= 3.4
-            sales[45] *= 2.6
-            unit_prices[45] = cost * 1.05
-            sales[75] *= 0.15
-        elif sku == "SKU-002":
-            sales[50] *= 2.8
-
-        tx_count = np.maximum(1, np.round(sales * 0.75)).astype(int)
-
-        frames.append(
-            pd.DataFrame({
-                "date": dates.strftime("%Y-%m-%d"),
-                "sku_id": sku,
-                "category": cat,
-                "observed_sales": sales,
-                "in_stock": in_stock,
-                "price": unit_prices,
-                "unit_cost": cost,
-                "transaction_count": tx_count,
-                "promo_flag": (dates.dayofweek == 6).astype(int),
-                "store_cluster": "Tier-1",
-            })
-        )
-    return pd.concat(frames, ignore_index=True)
-
-
-@lru_cache(maxsize=32)
-def demo_forecast(day: str, horizon_days: int) -> list:
-    return generate_forecast_pipeline(demo_history(day), horizon_days)
-
-
-@lru_cache(maxsize=32)
-def demo_anomalies(
-    day: str,
-    window: int,
-    threshold: float,
-    peer_threshold: float,
-    min_margin: float,
-    contamination: float,
-) -> list:
-    return detect_hybrid_anomalies(
-        demo_history(day),
-        window=window,
-        threshold=threshold,
-        peer_threshold=peer_threshold,
-        min_margin_threshold=min_margin,
-        contamination=contamination,
-    )
-
-
 def validate_history(df: pd.DataFrame) -> None:
     short = df.groupby("sku_id").size().loc[lambda n: n < MIN_HISTORY_DAYS]
     if not short.empty:
@@ -434,12 +362,12 @@ def health():
 @app.post("/api/forecast")
 def run_forecast_endpoint(payload: ForecastRequest):
     try:
-        if payload.history:
-            df = pd.DataFrame([r.model_dump() for r in payload.history])
-            validate_history(df)
-            data = generate_forecast_pipeline(df, payload.horizon_days)
-        else:
-            data = demo_forecast(pd.Timestamp.now().strftime("%Y-%m-%d"), payload.horizon_days)
+        if not payload.history:
+            return {"status": "success", "data": []}
+
+        df = pd.DataFrame([r.model_dump() for r in payload.history])
+        validate_history(df)
+        data = generate_forecast_pipeline(df, payload.horizon_days)
         return {"status": "success", "data": data}
     except HTTPException:
         raise
@@ -450,27 +378,35 @@ def run_forecast_endpoint(payload: ForecastRequest):
 @app.post("/api/anomalies")
 def run_anomalies_endpoint(payload: AnomalyDetectionRequest):
     try:
-        today_str = pd.Timestamp.now().strftime("%Y-%m-%d")
-        if payload.history:
-            df = pd.DataFrame([r.model_dump() for r in payload.history])
-            validate_history(df)
-            records = detect_hybrid_anomalies(
-                df,
-                window=payload.window_days,
-                threshold=payload.threshold_sigma,
-                peer_threshold=payload.peer_threshold_ratio,
-                min_margin_threshold=payload.min_margin_pct_threshold,
-                contamination=payload.contamination_rate,
-            )
-        else:
-            records = demo_anomalies(
-                today_str,
-                window=payload.window_days,
-                threshold=payload.threshold_sigma,
-                peer_threshold=payload.peer_threshold_ratio,
-                min_margin=payload.min_margin_pct_threshold,
-                contamination=payload.contamination_rate,
-            )
+        if not payload.history:
+            return {
+                "status": "success",
+                "metadata": {
+                    "window_days": payload.window_days,
+                    "threshold_sigma": payload.threshold_sigma,
+                    "peer_threshold_ratio": payload.peer_threshold_ratio,
+                    "min_margin_pct_threshold": payload.min_margin_pct_threshold,
+                    "contamination_rate": payload.contamination_rate,
+                    "total_points": 0,
+                    "anomalies_count": 0,
+                    "margin_collapses": 0,
+                    "isolated_shocks": 0,
+                    "category_surges": 0,
+                },
+                "timeline": [],
+                "anomalies": [],
+            }
+
+        df = pd.DataFrame([r.model_dump() for r in payload.history])
+        validate_history(df)
+        records = detect_hybrid_anomalies(
+            df,
+            window=payload.window_days,
+            threshold=payload.threshold_sigma,
+            peer_threshold=payload.peer_threshold_ratio,
+            min_margin_threshold=payload.min_margin_pct_threshold,
+            contamination=payload.contamination_rate,
+        )
 
         anomalies_only = [r for r in records if r["is_anomaly"]]
 
