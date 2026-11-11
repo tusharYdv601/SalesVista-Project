@@ -8,7 +8,7 @@ import { AuthPage } from './pages/AuthPage';
 import { DashboardLayout } from './pages/DashboardLayout';
 
 const lazyView = (name: string, load: () => Promise<Record<string, React.ComponentType>>) =>
-  lazy(() => load().then(m => ({ default: m[name] })));
+  lazy(() => load().then(m => ({ default: m[name] ?? m.default })));
 
 const MainView = lazyView('MainView', () => import('./pages/dashboard/MainView'));
 const StoresView = lazyView('StoresView', () => import('./pages/dashboard/StoresView'));
