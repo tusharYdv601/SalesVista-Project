@@ -106,7 +106,7 @@ export const DemographicsView: React.FC = () => {
         const [custRes, demoRes, txRes, catRes] = await Promise.all([
           supabase
             .from('customers')
-            .select('id, full_name, date_of_birth, gender, demographic_id, city, state, region, customer_segment')
+            .select('id, customer_code, full_name, date_of_birth, gender, demographic_id, city, state, region, customer_segment')
             .eq('owner_id', user.id)
             .limit(10000),
           supabase
@@ -154,19 +154,28 @@ export const DemographicsView: React.FC = () => {
         }
 
         // Build index lookup maps
-        const demoMap = new Map<number, any>();
-        demoProfiles.forEach((d) => demoMap.set(d.id, d));
+        const demoMap = new Map<string, any>();
+        demoProfiles.forEach((d) => demoMap.set(String(d.id), d));
 
-        // Group transactions by customer_id
-        const customerSpendMap = new Map<number, { spend: number; orders: number; channels: Record<string, number> }>();
+        const codeToIdMap = new Map<string, string>();
+        customers.forEach((c) => {
+          if (c.customer_code) {
+            codeToIdMap.set(String(c.customer_code).trim().toLowerCase(), String(c.id));
+          }
+        });
+
+        // Group transactions by customer_id (string normalized, supports ID & code)
+        const customerSpendMap = new Map<string, { spend: number; orders: number; channels: Record<string, number> }>();
         transactions.forEach((tx) => {
-          if (!tx.customer_id) return;
-          const curr = customerSpendMap.get(tx.customer_id) || { spend: 0, orders: 0, channels: {} };
+          const rawCid = String(tx.customer_id ?? '').trim();
+          if (!rawCid) return;
+          const resolvedId = codeToIdMap.get(rawCid.toLowerCase()) || rawCid;
+          const curr = customerSpendMap.get(resolvedId) || { spend: 0, orders: 0, channels: {} };
           curr.spend += Number(tx.total_amount) || 0;
           curr.orders += 1;
           const ch = tx.sales_channel || 'Direct';
           curr.channels[ch] = (curr.channels[ch] || 0) + 1;
-          customerSpendMap.set(tx.customer_id, curr);
+          customerSpendMap.set(resolvedId, curr);
         });
 
         // Group customers into meaningful demographic cohorts
@@ -184,7 +193,7 @@ export const DemographicsView: React.FC = () => {
         }>();
 
         customers.forEach((c) => {
-          const d = c.demographic_id ? demoMap.get(c.demographic_id) : null;
+          const d = c.demographic_id ? demoMap.get(String(c.demographic_id)) : null;
           
           // Calculate age group if date_of_birth exists
           let ageGroup = d?.age_group || '25-34';
@@ -206,7 +215,7 @@ export const DemographicsView: React.FC = () => {
           const reg = c.region || 'National';
 
           const groupKey = `${ageGroup}___${income}___${reg}`;
-          const metrics = customerSpendMap.get(c.id) || { spend: 0, orders: 0, channels: {} };
+          const metrics = customerSpendMap.get(String(c.id)) || (c.customer_code ? customerSpendMap.get(String(c.customer_code).trim().toLowerCase()) : undefined) || { spend: 0, orders: 0, channels: {} };
 
           const existing = groupMap.get(groupKey);
           if (existing) {
