@@ -70,16 +70,24 @@ export const SegmentationView: React.FC = () => {
         const now = Date.now();
         const txByCustomer: Record<string, { count: number; spend: number; dates: string[] }> = {};
 
-        txData.forEach((t: any) => {
-          const cid = String(t.customer_id ?? '');
-          if (!cid) return;
-          if (!txByCustomer[cid]) {
-            txByCustomer[cid] = { count: 0, spend: 0, dates: [] };
+        const codeToIdMap = new Map<string, string>();
+        custData.forEach((c: any) => {
+          if (c.customer_code) {
+            codeToIdMap.set(String(c.customer_code).trim().toLowerCase(), String(c.id));
           }
-          txByCustomer[cid].count += 1;
-          txByCustomer[cid].spend += Number(t.total_amount) || 0;
+        });
+
+        txData.forEach((t: any) => {
+          const rawCid = String(t.customer_id ?? '').trim();
+          if (!rawCid) return;
+          const resolvedId = codeToIdMap.get(rawCid.toLowerCase()) || rawCid;
+          if (!txByCustomer[resolvedId]) {
+            txByCustomer[resolvedId] = { count: 0, spend: 0, dates: [] };
+          }
+          txByCustomer[resolvedId].count += 1;
+          txByCustomer[resolvedId].spend += Number(t.total_amount) || 0;
           if (t.transaction_date) {
-            txByCustomer[cid].dates.push(t.transaction_date);
+            txByCustomer[resolvedId].dates.push(t.transaction_date);
           }
         });
 

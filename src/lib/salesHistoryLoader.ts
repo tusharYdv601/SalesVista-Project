@@ -53,8 +53,8 @@ export async function fetchUserSalesHistory(userId: string): Promise<UserSalesHi
     };
   }
 
-  // 2. Concurrently fetch sales items and products (also tenant-scoped)
-  const [itemsRes, prodsRes] = await Promise.all([
+  // 2. Concurrently fetch sales items, products, and categories (tenant-scoped)
+  const [itemsRes, prodsRes, catRes] = await Promise.all([
     supabase
       .from('sales_items')
       .select('transaction_id, product_id, quantity, unit_price, discount_amount')
@@ -65,23 +65,38 @@ export async function fetchUserSalesHistory(userId: string): Promise<UserSalesHi
       .select('id, product_code, product_name, category_id, unit_price, cost_price')
       .eq('owner_id', userId)
       .limit(2000),
+    supabase
+      .from('product_categories')
+      .select('id, category_name')
+      .eq('owner_id', userId)
+      .limit(100),
   ]);
 
   const items = itemsRes.data || [];
   const prods = prodsRes.data || [];
+  const cats = catRes.data || [];
 
-  const prodMap = new Map<number, any>();
-  prods.forEach((p) => prodMap.set(p.id, p));
+  const catMap = new Map<string, string>();
+  cats.forEach((c) => catMap.set(String(c.id), c.category_name));
 
-  const txDateMap = new Map<number, string>();
+  const prodMap = new Map<string, any>();
+  prods.forEach((p) => {
+    prodMap.set(String(p.id), p);
+    if (p.product_code) {
+      prodMap.set(String(p.product_code), p);
+    }
+  });
+
+  const txDateMap = new Map<string, string>();
   txList.forEach((t) => {
     if (t.transaction_date) {
-      txDateMap.set(t.id, t.transaction_date.slice(0, 10));
+      txDateMap.set(String(t.id), String(t.transaction_date).slice(0, 10));
     }
   });
 
   const skuBasePrices: Record<string, number> = {};
   let rawRecords: SalesRecordPayload[] = [];
+  let matchedItemCount = 0;
 
   if (items.length > 0) {
     // Aggregation per (date, sku_id) from sales_items
@@ -100,11 +115,13 @@ export async function fetchUserSalesHistory(userId: string): Promise<UserSalesHi
     >();
 
     items.forEach((item) => {
-      const date = txDateMap.get(item.transaction_id);
+      const date = txDateMap.get(String(item.transaction_id));
       if (!date) return;
-      const product = prodMap.get(item.product_id);
-      const sku_id = product?.product_code || `SKU-${item.product_id}`;
-      const category = product?.product_name || 'General Merchandise';
+      matchedItemCount++;
+
+      const product = prodMap.get(String(item.product_id));
+      const sku_id = product?.product_code || (item.product_id ? String(item.product_id) : `ITEM-${item.transaction_id}`);
+      const category = (product?.category_id && catMap.get(String(product.category_id))) || product?.product_name || 'General Merchandise';
       const key = `${date}___${sku_id}`;
 
       const qty = Number(item.quantity) || 1;
@@ -133,24 +150,28 @@ export async function fetchUserSalesHistory(userId: string): Promise<UserSalesHi
       }
     });
 
-    rawRecords = Array.from(aggMap.values()).map((r) => {
-      const avgPrice = r.total_qty > 0 ? Number((r.total_rev / r.total_qty).toFixed(2)) : 50;
-      skuBasePrices[r.sku_id] = avgPrice;
-      return {
-        date: r.date,
-        sku_id: r.sku_id,
-        category: r.category,
-        observed_sales: Math.round(r.total_qty),
-        in_stock: 1,
-        price: avgPrice,
-        unit_cost: r.total_qty > 0 ? Number((r.total_cost / r.total_qty).toFixed(2)) : 25,
-        promo_flag: r.has_promo ? 1 : 0,
-        transaction_count: r.tx_count,
-        store_cluster: 'Tier-1',
-      };
-    });
-  } else {
-    // Direct fallback: aggregate transactions by channel & date
+    if (matchedItemCount > 0) {
+      rawRecords = Array.from(aggMap.values()).map((r) => {
+        const avgPrice = r.total_qty > 0 ? Number((r.total_rev / r.total_qty).toFixed(2)) : 50;
+        skuBasePrices[r.sku_id] = avgPrice;
+        return {
+          date: r.date,
+          sku_id: r.sku_id,
+          category: r.category,
+          observed_sales: Math.round(r.total_qty),
+          in_stock: 1,
+          price: avgPrice,
+          unit_cost: r.total_qty > 0 ? Number((r.total_cost / r.total_qty).toFixed(2)) : 25,
+          promo_flag: r.has_promo ? 1 : 0,
+          transaction_count: r.tx_count,
+          store_cluster: 'Tier-1',
+        };
+      });
+    }
+  }
+
+  // Fallback: aggregate transactions by channel & date if no items or items didn't match
+  if (rawRecords.length === 0) {
     const aggMap = new Map<
       string,
       {
@@ -164,9 +185,9 @@ export async function fetchUserSalesHistory(userId: string): Promise<UserSalesHi
 
     txList.forEach((tx) => {
       if (!tx.transaction_date) return;
-      const date = tx.transaction_date.slice(0, 10);
+      const date = String(tx.transaction_date).slice(0, 10);
       const channel = tx.sales_channel || 'Direct';
-      const sku_id = `${channel.toUpperCase().replace(/\s+/g, '_')}_CHANNEL`;
+      const sku_id = `${channel.replace(/\s+/g, '_')}`;
       const category = `${channel} Sales`;
       const key = `${date}___${sku_id}`;
 
@@ -204,31 +225,17 @@ export async function fetchUserSalesHistory(userId: string): Promise<UserSalesHi
     });
   }
 
-  // Count distinct dates per SKU
-  const skuDates = new Map<string, Set<string>>();
+  // Count distinct dates
   const allDates = new Set<string>();
+  rawRecords.forEach((r) => allDates.add(r.date));
 
-  rawRecords.forEach((r) => {
-    allDates.add(r.date);
-    if (!skuDates.has(r.sku_id)) skuDates.set(r.sku_id, new Set());
-    skuDates.get(r.sku_id)!.add(r.date);
-  });
-
-  // Strict validation: Python backend requires >= 3 days per SKU for LightGBM & Z-score baselines
-  const eligibleSkus = new Set(
-    Array.from(skuDates.entries())
-      .filter(([_, dates]) => dates.size >= 3)
-      .map(([sku]) => sku)
-  );
-
-  const eligibleHistory = rawRecords.filter((r) => eligibleSkus.has(r.sku_id));
-  const availableSkus = Array.from(new Set(eligibleHistory.map((r) => r.sku_id)));
-  const availableCategories = Array.from(new Set(eligibleHistory.map((r) => r.category)));
+  const availableSkus = Array.from(new Set(rawRecords.map((r) => r.sku_id)));
+  const availableCategories = Array.from(new Set(rawRecords.map((r) => r.category)));
 
   return {
     totalTxCount: txList.length,
     distinctDays: allDates.size,
-    history: eligibleHistory,
+    history: rawRecords,
     availableSkus,
     availableCategories,
     skuBasePrices,

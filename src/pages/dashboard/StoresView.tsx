@@ -953,7 +953,7 @@ export const StoresView: React.FC = () => {
                       fontSize={11}
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={(val) => `$${(val / 1000).toFixed(0)}k`}
+                      tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}k`}
                     />
                     <Tooltip
                       formatter={(val: number) => [formatCurrency(val), 'Net Sales']}
@@ -1133,7 +1133,7 @@ export const StoresView: React.FC = () => {
                       fontSize={11}
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={(val) => `$${(val / 1000).toFixed(0)}k`}
+                      tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}k`}
                     />
                     <Tooltip
                       formatter={(val: number) => [formatCurrency(val), 'Monthly Sales']}
@@ -1605,7 +1605,7 @@ export const StoresView: React.FC = () => {
                         fontSize={10}
                         tickLine={false}
                         axisLine={false}
-                        tickFormatter={(val) => `$${(val / 1000).toFixed(0)}k`}
+                        tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}k`}
                       />
                       <Tooltip
                         formatter={(val: number) => [formatCurrency(val), 'Revenue']}

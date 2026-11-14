@@ -91,8 +91,8 @@ def correct_censored_demand(df: pd.DataFrame, window: int = 14) -> pd.DataFrame:
 
     for _, g in df.groupby("sku_id"):
         valid = g["observed_sales"].where(g["in_stock"] == 1)
-        mean = valid.rolling(window, min_periods=MIN_HISTORY_DAYS).mean().bfill().ffill().fillna(0.0)
-        std = valid.rolling(window, min_periods=MIN_HISTORY_DAYS).std().bfill().ffill().fillna(1.0)
+        mean = valid.rolling(window, min_periods=1).mean().bfill().ffill().fillna(0.0)
+        std = valid.rolling(window, min_periods=1).std().bfill().ffill().fillna(1.0)
 
         censored = g["in_stock"] == 0
         mu = mean[censored]
@@ -108,9 +108,40 @@ def forecast_sku(group: pd.DataFrame, horizon_days: int) -> list:
     sku_id, category = group["sku_id"].iloc[0], group["category"].iloc[0]
     demand = group["unconstrained_demand"].to_numpy()
 
+    future = pd.date_range(group["date"].max() + pd.Timedelta(days=1), periods=horizon_days, freq="D")
+
+    # Handle sparse series (< 3 observations) gracefully without crashing
+    if len(group) < 3:
+        avg_demand = max(0.0, float(np.mean(demand)))
+        p50_val = round(avg_demand, 2)
+        p10_val = round(max(0.0, p50_val * 0.8), 2)
+        p90_val = round(max(0.0, p50_val * 1.25), 2)
+        return [
+            {
+                "date": day.strftime("%Y-%m-%d"),
+                "sku_id": sku_id,
+                "category": category,
+                "pred_p10": p10_val,
+                "pred_p50": p50_val,
+                "pred_p90": p90_val,
+                "elasticity": -1.25,
+            }
+            for day in future
+        ]
+
+    # Series with >= 3 observations: Full LightGBM quantile regression
     log_price = np.log(np.maximum(group["price"].to_numpy(), 1e-4)).reshape(-1, 1)
-    lr = LinearRegression().fit(log_price, np.log(np.maximum(demand, 1e-3)))
-    elasticity = min(float(lr.coef_[0]), -0.05)
+    std_log_p = float(np.std(log_price))
+    if std_log_p >= 0.02:
+        try:
+            lr = LinearRegression().fit(log_price, np.log(np.maximum(demand, 1e-3)))
+            elasticity = float(lr.coef_[0])
+            elasticity = min(max(elasticity, -3.0), -0.3)
+        except Exception:
+            elasticity = -1.25
+    else:
+        # If historical price has zero/minimal variance, use empirical retail baseline
+        elasticity = -1.25
 
     sin_dow, cos_dow = _dow_features(group["date"].dt.dayofweek.to_numpy())
     train = np.column_stack([
@@ -121,12 +152,14 @@ def forecast_sku(group: pd.DataFrame, horizon_days: int) -> list:
     ])
     y_adj = demand / np.exp(elasticity * log_price.ravel())
 
+    min_child = max(1, min(5, len(group) // 2))
     models = [
         lgb.LGBMRegressor(
             objective="quantile",
             alpha=q,
             n_estimators=60,
             learning_rate=0.08,
+            min_child_samples=min_child,
             verbose=-1,
             random_state=42,
             n_jobs=1,
@@ -135,7 +168,6 @@ def forecast_sku(group: pd.DataFrame, horizon_days: int) -> list:
     ]
 
     price_factor = float(np.exp(elasticity * log_price[-1, 0]))
-    future = pd.date_range(group["date"].max() + pd.Timedelta(days=1), periods=horizon_days, freq="D")
     sin_f, cos_f = _dow_features(future.dayofweek.to_numpy())
     is_weekend = (future.dayofweek >= 5).astype(int)
     model_p10, model_p50, model_p90 = models
@@ -179,6 +211,9 @@ def generate_forecast_pipeline(df: pd.DataFrame, horizon_days: int) -> list:
 # ---------------------------------------------------------
 def compute_isolation_forest_scores(df: pd.DataFrame, contamination: float = 0.05) -> pd.Series:
     """Computes unsupervised multi-dimensional anomaly scores across sales, price, and stock status."""
+    if len(df) < 5:
+        return pd.Series([0.5] * len(df), index=df.index)
+
     feature_cols = ["observed_sales", "price", "promo_flag", "in_stock"]
     X = df[feature_cols].fillna(0.0).to_numpy()
 
@@ -244,11 +279,11 @@ def detect_hybrid_anomalies(
         g = group.copy().sort_values("date").set_index("date")
         sales = g["observed_sales"].astype(float)
 
-        rolling_median = sales.rolling(window=window, min_periods=3, center=True).median()
+        rolling_median = sales.rolling(window=window, min_periods=1, center=True).median()
         rolling_median = rolling_median.bfill().ffill().fillna(sales.median())
 
         abs_dev = (sales - rolling_median).abs()
-        mad = abs_dev.rolling(window=window, min_periods=3, center=True).median() * 1.4826
+        mad = abs_dev.rolling(window=window, min_periods=1, center=True).median() * 1.4826
         mad = mad.replace(0.0, np.nan).bfill().ffill().fillna(1.0)
 
         z_scores = 0.6745 * (sales - rolling_median) / mad
@@ -261,7 +296,7 @@ def detect_hybrid_anomalies(
         peer_iqr = g["peer_iqr"]
         peer_discrepancy = (sales - peer_median) / peer_iqr
 
-        baseline_margin = g["margin_pct"].rolling(window=window, min_periods=3, center=True).median()
+        baseline_margin = g["margin_pct"].rolling(window=window, min_periods=1, center=True).median()
         baseline_margin = baseline_margin.bfill().ffill().fillna(g["margin_pct"].median())
 
         for dt, actual, b_line, ub, lb, res, z, p_med, p_score, margin, b_margin, rev, aov, iso_s in zip(
@@ -342,16 +377,6 @@ def detect_hybrid_anomalies(
 
 
 # ---------------------------------------------------------
-def validate_history(df: pd.DataFrame) -> None:
-    short = df.groupby("sku_id").size().loc[lambda n: n < MIN_HISTORY_DAYS]
-    if not short.empty:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Need at least {MIN_HISTORY_DAYS} days of history per SKU; too short: {', '.join(short.index)}",
-        )
-
-
-# ---------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------
 @app.get("/api/health")
@@ -366,7 +391,6 @@ def run_forecast_endpoint(payload: ForecastRequest):
             return {"status": "success", "data": []}
 
         df = pd.DataFrame([r.model_dump() for r in payload.history])
-        validate_history(df)
         data = generate_forecast_pipeline(df, payload.horizon_days)
         return {"status": "success", "data": data}
     except HTTPException:
@@ -398,7 +422,6 @@ def run_anomalies_endpoint(payload: AnomalyDetectionRequest):
             }
 
         df = pd.DataFrame([r.model_dump() for r in payload.history])
-        validate_history(df)
         records = detect_hybrid_anomalies(
             df,
             window=payload.window_days,
