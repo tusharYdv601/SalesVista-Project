@@ -131,10 +131,16 @@ def forecast_sku(group: pd.DataFrame, horizon_days: int) -> list:
 
     # Series with >= 3 observations: Full LightGBM quantile regression
     log_price = np.log(np.maximum(group["price"].to_numpy(), 1e-4)).reshape(-1, 1)
-    try:
-        lr = LinearRegression().fit(log_price, np.log(np.maximum(demand, 1e-3)))
-        elasticity = min(float(lr.coef_[0]), -0.05)
-    except Exception:
+    std_log_p = float(np.std(log_price))
+    if std_log_p >= 0.02:
+        try:
+            lr = LinearRegression().fit(log_price, np.log(np.maximum(demand, 1e-3)))
+            elasticity = float(lr.coef_[0])
+            elasticity = min(max(elasticity, -3.0), -0.3)
+        except Exception:
+            elasticity = -1.25
+    else:
+        # If historical price has zero/minimal variance, use empirical retail baseline
         elasticity = -1.25
 
     sin_dow, cos_dow = _dow_features(group["date"].dt.dayofweek.to_numpy())

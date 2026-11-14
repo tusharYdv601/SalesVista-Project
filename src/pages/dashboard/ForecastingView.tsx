@@ -255,33 +255,34 @@ export const ForecastingView: React.FC = () => {
   }, [echelonAggregatedData, simulatedPriceChange, promoBoostEnabled, primaryElasticity, effectivePrice]);
 
   // Aggregate Metrics & Scorecards
-  const totalBaseUnits = echelonAggregatedData.reduce((acc, cur) => acc + cur.pred_p50, 0);
-  const totalSimUnits = simulatedData.reduce((acc, cur) => acc + cur.pred_p50, 0);
-  const totalP10Units = simulatedData.reduce((acc, cur) => acc + cur.pred_p10, 0);
-  const totalP90Units = simulatedData.reduce((acc, cur) => acc + cur.pred_p90, 0);
+  const totalBaseUnits = Math.round(echelonAggregatedData.reduce((acc, cur) => acc + cur.pred_p50, 0));
+  const totalSimUnits = Math.round(simulatedData.reduce((acc, cur) => acc + cur.pred_p50, 0));
+  const totalP10Units = Math.round(simulatedData.reduce((acc, cur) => acc + cur.pred_p10, 0));
+  const totalP90Units = Math.round(simulatedData.reduce((acc, cur) => acc + cur.pred_p90, 0));
   const grossSimRevenue = simulatedData.reduce((acc, cur) => acc + (cur.projected_revenue || 0), 0);
   const netPortfolioRevenue = grossSimRevenue + totalCannibalizedRevenue;
-  const unitDeltaPercent = totalBaseUnits > 0 ? (((totalSimUnits - totalBaseUnits) / totalBaseUnits) * 100).toFixed(1) : "0.0";
-  const uncertaintySpreadPct = totalSimUnits > 0 ? (((totalP90Units - totalP10Units) / totalSimUnits) * 100).toFixed(0) : "0";
+  const unitDelta = totalSimUnits - totalBaseUnits;
+  const unitDeltaPercent = totalBaseUnits > 0 ? ((unitDelta / totalBaseUnits) * 100).toFixed(1) : "0.0";
+  const uncertaintySpreadPct = totalSimUnits > 0 ? (((totalP90Units - totalP10Units) / (2 * totalSimUnits)) * 100).toFixed(0) : "0";
 
   // Inventory & Safety Stock Calculations
   const inventoryMetrics = useMemo(() => {
     if (simulatedData.length === 0) return { avgDailyDemand: 0, leadTimeDemand: 0, safetyStock: 0, reorderPoint: 0, leadTimeShare: 50, safetyShare: 50 };
 
     const avgDailyDemand = totalSimUnits / simulatedData.length;
-    const leadTimeDemand = avgDailyDemand * leadTimeDays;
+    const leadTimeDemand = Math.round(avgDailyDemand * leadTimeDays);
     const avgDailyStdDev = simulatedData.reduce((acc, cur) => acc + ((cur.pred_p90 - cur.pred_p10) / (2 * 1.28)), 0) / simulatedData.length;
     
-    const safetyStock = Math.ceil(serviceLevelZ * avgDailyStdDev * Math.sqrt(leadTimeDays));
-    const reorderPoint = Math.ceil(leadTimeDemand + safetyStock);
+    const safetyStock = Math.round(serviceLevelZ * avgDailyStdDev * Math.sqrt(leadTimeDays));
+    const reorderPoint = leadTimeDemand + safetyStock;
 
-    const totalRop = leadTimeDemand + safetyStock || 1;
+    const totalRop = reorderPoint || 1;
     const leadTimeShare = Math.round((leadTimeDemand / totalRop) * 100);
     const safetyShare = 100 - leadTimeShare;
 
     return {
       avgDailyDemand: Math.round(avgDailyDemand),
-      leadTimeDemand: Math.round(leadTimeDemand),
+      leadTimeDemand,
       safetyStock,
       reorderPoint,
       leadTimeShare,
@@ -500,8 +501,8 @@ export const ForecastingView: React.FC = () => {
               <span className="text-xs text-slate-500 font-medium">units</span>
             </div>
             <div className="text-[11px] text-slate-500 flex justify-between pt-1 border-t border-slate-100">
-              <span>Baseline: {totalBaseUnits.toLocaleString()}</span>
-              <span className="font-semibold text-slate-700">{totalSimUnits - totalBaseUnits >= 0 ? `+${totalSimUnits - totalBaseUnits}` : totalSimUnits - totalBaseUnits}</span>
+              <span>Baseline: {totalBaseUnits.toLocaleString()} units</span>
+              <span className="font-semibold text-slate-700">{unitDelta >= 0 ? `+${unitDelta.toLocaleString()}` : `${unitDelta.toLocaleString()}`} units</span>
             </div>
           </div>
 
@@ -652,7 +653,7 @@ export const ForecastingView: React.FC = () => {
                 />
               </div>
               <div className="flex justify-between text-[10px] text-slate-400">
-                <span>Base: {totalBaseUnits.toLocaleString()}</span>
+                <span>Base: {totalBaseUnits.toLocaleString()} units</span>
                 <span className="font-semibold text-slate-700">Sim: {totalSimUnits.toLocaleString()} units</span>
               </div>
             </div>
@@ -695,7 +696,7 @@ export const ForecastingView: React.FC = () => {
                   
                   {item.sku === selectedSku ? (
                     <div className="text-[11px] text-emerald-700 mt-1 font-medium">
-                      Direct Volume Shift: {unitDeltaPercent}% ({totalSimUnits - totalBaseUnits} units)
+                      Direct Volume Shift: {unitDeltaPercent}% ({unitDelta >= 0 ? `+${unitDelta.toLocaleString()}` : `${unitDelta.toLocaleString()}`} units)
                     </div>
                   ) : (
                     <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
